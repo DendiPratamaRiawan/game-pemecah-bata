@@ -4,9 +4,103 @@ Game Breakout/Brick Breaker klasik yang dibuat dengan React Native dan Expo. Han
 
 ![Game Screenshot](https://via.placeholder.com/400x800/1a1a2e/ffffff?text=Pemecah+Bata+Game)
 
+## 📸 Screenshot Aplikasi
+
+### Cara Menambahkan Screenshot ke Repository
+
+Untuk menambahkan screenshot aplikasi ke README ini, ikuti langkah-langkah berikut:
+
+1. **Ambil Screenshot**
+   - Jalankan aplikasi di perangkat atau emulator
+   - Ambil screenshot dari berbagai halaman aplikasi:
+     - Halaman Game (saat bermain)
+     - Halaman Leaderboard
+     - Halaman Pengaturan
+     - Halaman Info
+
+2. **Simpan Screenshot ke Folder `assets/screenshots/`**
+   ```bash
+   # Buat folder screenshots jika belum ada
+   mkdir -p assets/screenshots
+   
+   # Pindahkan screenshot ke folder tersebut
+   # Contoh nama file:
+   # - game-screen.png
+   # - leaderboard-screen.png
+   # - settings-screen.png
+   # - info-screen.png
+   ```
+
+3. **Update README.md**
+   Ganti placeholder screenshot di atas dengan screenshot Anda menggunakan format berikut:
+   
+   ```markdown
+   ## 📸 Screenshot Aplikasi
+   
+   ### Halaman Game
+   ![Game Screen](./assets/screenshots/game-screen.png)
+   
+   ### Halaman Leaderboard
+   ![Leaderboard Screen](./assets/screenshots/leaderboard-screen.png)
+   
+   ### Halaman Pengaturan
+   ![Settings Screen](./assets/screenshots/settings-screen.png)
+   
+   ### Halaman Info
+   ![Info Screen](./assets/screenshots/info-screen.png)
+   ```
+
+4. **Commit dan Push ke GitHub**
+   ```bash
+   git add assets/screenshots/
+   git add README.md
+   git commit -m "docs: Tambahkan screenshot aplikasi"
+   git push origin main
+   ```
+
+### Tips Screenshot yang Baik
+
+- 📱 **Ukuran**: Gunakan resolusi tinggi (minimal 1080x1920 untuk mobile)
+- 🎨 **Format**: Gunakan format PNG atau JPG dengan kualitas tinggi
+- 📐 **Rasio**: Untuk mobile, gunakan rasio 9:16 (portrait)
+- 🌟 **Konten**: Pastikan screenshot menampilkan fitur utama aplikasi dengan jelas
+- 🎯 **Fokus**: Ambil screenshot saat aplikasi menampilkan konten yang menarik
+
+### Contoh Struktur Folder Screenshots
+
+```
+assets/
+├── screenshots/
+│   ├── game-screen.png          # Screenshot halaman game
+│   ├── leaderboard-screen.png   # Screenshot halaman leaderboard
+│   ├── settings-screen.png      # Screenshot halaman pengaturan
+│   ├── info-screen.png          # Screenshot halaman info
+│   └── gameplay-demo.gif        # (Opsional) GIF animasi gameplay
+```
+
+### Menggunakan Screenshot di README
+
+Setelah screenshot ditambahkan, Anda dapat menampilkannya di README dengan format:
+
+```markdown
+![Deskripsi Screenshot](./assets/screenshots/nama-file.png)
+```
+
+Atau untuk menampilkan beberapa screenshot dalam grid:
+
+```markdown
+<div align="center">
+  <img src="./assets/screenshots/game-screen.png" width="200" />
+  <img src="./assets/screenshots/leaderboard-screen.png" width="200" />
+  <img src="./assets/screenshots/settings-screen.png" width="200" />
+  <img src="./assets/screenshots/info-screen.png" width="200" />
+</div>
+```
+
 ## 📋 Daftar Isi
 
 - [Fitur](#-fitur)
+- [Screenshot Aplikasi](#-screenshot-aplikasi)
 - [Teknologi yang Digunakan](#-teknologi-yang-digunakan)
 - [Persyaratan](#-persyaratan)
 - [Instalasi](#-instalasi)
