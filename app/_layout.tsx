@@ -1,21 +1,10 @@
-/**
+/*
  * ============================================
  * WATERMARK DEVELOPER
  * ============================================
- * Nama        : Edi Suherlan
- * GitHub      : github/edisuherlan
- * Email       : audhighasu@gmail.com
- * Website     : audhighasu.com
+ * Nama        : Dendi Pratama Riawan
+ * GitHub      : github/DendiPratamaRiawan
  * ============================================
- * 
- * FILE: app/_layout.tsx
- * DESKRIPSI: Root layout untuk aplikasi - mengatur tema dan navigasi stack
- * 
- * File ini adalah root layout yang mengatur struktur navigasi dan tema aplikasi.
- * Layout ini membungkus seluruh aplikasi dan menentukan:
- * - Tema aplikasi (light/dark mode) berdasarkan sistem
- * - Struktur navigasi stack (tabs dan modal)
- * - Status bar style
  */
 
 // Import tema dan ThemeProvider dari @react-navigation/native

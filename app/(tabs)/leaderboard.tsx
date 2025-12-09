@@ -1,35 +1,47 @@
-/**
+/*
  * ============================================
  * WATERMARK DEVELOPER
  * ============================================
- * Nama        : Edi Suherlan
- * GitHub      : github/edisuherlan
- * Email       : audhighasu@gmail.com
- * Website     : audhighasu.com
+ * Nama        : Dendi Pratama Riawan
+ * GitHub      : github/DendiPratamaRiawan
  * ============================================
- * 
- * FILE: app/(tabs)/leaderboard.tsx
- * DESKRIPSI: Halaman leaderboard/papan peringkat
- * 
- * Halaman ini menampilkan daftar semua pemain beserta skor tertinggi mereka.
- * Pemain dapat melihat riwayat permainan mereka dan mengubah nama mereka.
  */
-
 import PlayerForm from '@/components/PlayerForm';
 import { GameSession, getAllPlayers, getPlayerSessions, initDatabase, Player, updatePlayerName } from '@/utils/database';
+import { MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+const { width } = Dimensions.get('window');
 
+// ============================================
+// KONSTANTA WARNA (Dark Mode Schema)
+// ============================================
+const COLORS = {
+  darkBackground: '#1A1A2E',
+  cardBackground: '#2E3A59',
+  primary: '#FFC72C', // Bright Gold (Aksen untuk skor/peringkat tinggi)
+  text: '#FFFFFF',
+  secondaryText: '#A0A0B0',
+  accent: '#4ECDC4', // Cyan (Untuk tombol, link, dan indikator aktif)
+  danger: '#E74C3C',
+};
+
+
+// ============================================
+// KOMPONEN SCREEN
+// ============================================
 export default function LeaderboardScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -50,32 +62,33 @@ export default function LeaderboardScreen() {
       }
     };
     initDb();
-    loadPlayers();
   }, []);
 
   // Refresh data when screen comes into focus
   useFocusEffect(
     useCallback(() => {
       loadPlayers();
+      // Reset selected player and sessions when focusing, unless re-focusing after name change
+      if (!editingPlayer && !showChangeNameForm) {
+        setSelectedPlayer(null);
+        setSessions([]);
+      }
     }, [])
   );
 
   const loadPlayers = async () => {
     try {
       setLoading(true);
-      // Ensure database is initialized
       await initDatabase();
+      // Mengambil semua pemain dan mengurutkannya berdasarkan HighScore
       const allPlayers = await getAllPlayers();
-      console.log('Leaderboard - Loaded players:', allPlayers.length, allPlayers);
-      
-      if (allPlayers.length === 0) {
-        console.log('Leaderboard - No players found, checking storage...');
-        // Try to check storage directly
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        const rawData = await AsyncStorage.getItem('@pemecah_bata:players');
-        console.log('Leaderboard - Raw storage data:', rawData);
-      }
-      
+      // Sortasi di sisi klien: HighScore descending, lalu TotalGames descending
+      allPlayers.sort((a, b) => {
+        if (b.highScore !== a.highScore) {
+            return b.highScore - a.highScore;
+        }
+        return b.totalGames - a.totalGames;
+      });
       setPlayers(allPlayers);
     } catch (error) {
       console.error('Error loading players:', error);
@@ -86,9 +99,19 @@ export default function LeaderboardScreen() {
 
   const loadPlayerSessions = async (player: Player) => {
     try {
+      // Jika pemain yang sama diklik, tutup detail
+      if (selectedPlayer?.id === player.id) {
+        setSelectedPlayer(null);
+        setSessions([]);
+        return;
+      }
+      
+      // Memberi efek loading sederhana saat sesi dimuat
+      setSessions([]); 
       const playerSessions = await getPlayerSessions(player.id, 10);
       setSessions(playerSessions);
       setSelectedPlayer(player);
+      
     } catch (error) {
       console.error('Error loading sessions:', error);
     }
@@ -111,10 +134,10 @@ export default function LeaderboardScreen() {
     try {
       const updatedPlayer = await updatePlayerName(editingPlayer.id, newName);
       
-      // Update in players list
+      // Update daftar pemain
       setPlayers(prev => prev.map(p => p.id === updatedPlayer.id ? updatedPlayer : p));
       
-      // Update selected player if it's the same
+      // Update pemain yang sedang dipilih
       if (selectedPlayer?.id === updatedPlayer.id) {
         setSelectedPlayer(updatedPlayer);
       }
@@ -128,23 +151,42 @@ export default function LeaderboardScreen() {
     }
   };
 
+  const renderRankIcon = (index: number) => {
+    switch (index) {
+      case 0:
+        return <MaterialIcons name="emoji-events" size={28} color={COLORS.primary} />;
+      case 1:
+        return <MaterialIcons name="emoji-events" size={24} color={COLORS.secondaryText} />;
+      case 2:
+        return <MaterialIcons name="emoji-events" size={20} color={COLORS.accent} />;
+      default:
+        return <Text style={styles.rankNumberText}>{index + 1}</Text>;
+    }
+  };
+
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar style="light" />
       
+      {/* HEADER BAR */}
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton} 
           onPress={() => router.back()}
         >
-          <Text style={styles.backButtonText}>← Kembali</Text>
+          <MaterialIcons name="arrow-back-ios" size={24} color={COLORS.accent} />
         </TouchableOpacity>
-        <Text style={styles.title}>Leaderboard</Text>
+        <Text style={styles.title}>
+            <MaterialIcons name="leaderboard" size={24} color={COLORS.primary} /> Papan Peringkat
+        </Text>
       </View>
 
-      {showChangeNameForm && editingPlayer ? (
+      {/* MODAL UBAH NAMA */}
+      {showChangeNameForm && editingPlayer && (
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Ubah Nama Pemain</Text>
             <PlayerForm 
               onSubmit={handleChangeName} 
               onCancel={() => {
@@ -155,54 +197,58 @@ export default function LeaderboardScreen() {
             />
           </View>
         </View>
-      ) : loading ? (
+      )}
+
+      {/* CONTENT */}
+      {loading ? (
         <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color={COLORS.accent} />
           <Text style={styles.loadingText}>Memuat data...</Text>
         </View>
       ) : players.length === 0 ? (
         <View style={styles.centerContainer}>
-          <Text style={styles.emptyText}>Belum ada data pemain</Text>
+          <Text style={styles.emptyText}>Belum ada data pemain 😔</Text>
           <Text style={styles.emptySubtext}>Mulai bermain untuk melihat skor!</Text>
         </View>
       ) : (
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          {/* Top Players */}
+          
+          {/* SECTION: TOP PLAYERS */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🏆 Top Pemain</Text>
+            <Text style={styles.sectionTitle}>🥇 Pemain Teratas ({players.length} Total)</Text>
             {players.slice(0, 10).map((player, index) => (
               <TouchableOpacity
                 key={player.id}
                 style={[
                   styles.playerCard,
                   selectedPlayer?.id === player.id && styles.selectedCard,
+                  index === 0 && styles.firstRankCard, // Styling khusus untuk Rank 1
                 ]}
                 onPress={() => loadPlayerSessions(player)}
               >
                 <View style={styles.rankContainer}>
-                  <Text style={styles.rankText}>
-                    {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `${index + 1}.`}
-                  </Text>
+                  {renderRankIcon(index)}
                 </View>
                 <View style={styles.playerInfo}>
                   <Text style={styles.playerName}>{player.name}</Text>
                   <Text style={styles.playerStats}>
-                    Skor Tertinggi: {player.highScore} | Level: {player.bestLevel} | 
-                    Total Permainan: {player.totalGames}
+                    Main: {player.totalGames} | Level Terbaik: {player.bestLevel}
                   </Text>
                 </View>
                 <View style={styles.scoreContainer}>
+                  <Text style={styles.scoreLabel}>SKOR TERTINGGI</Text>
                   <Text style={styles.scoreText}>{player.highScore}</Text>
                 </View>
               </TouchableOpacity>
             ))}
           </View>
 
-          {/* Player Details */}
+          {/* SECTION: PLAYER DETAILS (RIWAYAT) */}
           {selectedPlayer && (
             <View style={styles.section}>
               <View style={styles.playerHeader}>
                 <Text style={styles.sectionTitle}>
-                  📊 Riwayat {selectedPlayer.name}
+                  👤 Detail & Riwayat {selectedPlayer.name}
                 </Text>
                 <TouchableOpacity 
                   style={styles.editButton}
@@ -211,49 +257,55 @@ export default function LeaderboardScreen() {
                     setShowChangeNameForm(true);
                   }}
                 >
-                  <Text style={styles.editButtonText}>✏️ Ganti Nama</Text>
+                  <Text style={styles.editButtonText}>✏️ Ubah Nama</Text>
                 </TouchableOpacity>
               </View>
-              <View style={styles.statsCard}>
-                <View style={styles.statRow}>
-                  <Text style={styles.statLabel}>Skor Tertinggi:</Text>
-                  <Text style={styles.statValue}>{selectedPlayer.highScore}</Text>
+              
+              {/* STATS GRID */}
+              <View style={styles.statsCardGrid}>
+                <View style={styles.statGridItem}>
+                    <Text style={styles.statLabel}>Skor Tertinggi</Text>
+                    <Text style={styles.statValue}>{selectedPlayer.highScore}</Text>
                 </View>
-                <View style={styles.statRow}>
-                  <Text style={styles.statLabel}>Level Terbaik:</Text>
-                  <Text style={styles.statValue}>{selectedPlayer.bestLevel}</Text>
+                <View style={styles.statGridItem}>
+                    <Text style={styles.statLabel}>Total Main</Text>
+                    <Text style={styles.statValue}>{selectedPlayer.totalGames}</Text>
                 </View>
-                <View style={styles.statRow}>
-                  <Text style={styles.statLabel}>Total Permainan:</Text>
-                  <Text style={styles.statValue}>{selectedPlayer.totalGames}</Text>
+                <View style={styles.statGridItem}>
+                    <Text style={styles.statLabel}>Level Terbaik</Text>
+                    <Text style={styles.statValue}>{selectedPlayer.bestLevel}</Text>
                 </View>
-                <View style={styles.statRow}>
-                  <Text style={styles.statLabel}>Total Skor:</Text>
-                  <Text style={styles.statValue}>{selectedPlayer.totalScore}</Text>
-                </View>
-                <View style={styles.statRow}>
-                  <Text style={styles.statLabel}>Rata-rata Skor:</Text>
-                  <Text style={styles.statValue}>
-                    {selectedPlayer.totalGames > 0
-                      ? Math.round(selectedPlayer.totalScore / selectedPlayer.totalGames)
-                      : 0}
-                  </Text>
+                <View style={styles.statGridItem}>
+                    <Text style={styles.statLabel}>Rata-rata Skor</Text>
+                    <Text style={styles.statValue}>
+                        {selectedPlayer.totalGames > 0
+                          ? Math.round(selectedPlayer.totalScore / selectedPlayer.totalGames)
+                          : 0}
+                    </Text>
                 </View>
               </View>
 
-              {sessions.length > 0 && (
+              {/* SESSIONS TABLE */}
+              {sessions.length > 0 ? (
                 <>
-                  <Text style={styles.sectionSubtitle}>10 Permainan Terakhir</Text>
-                  {sessions.map((session) => (
-                    <View key={session.id} style={styles.sessionCard}>
-                      <View style={styles.sessionInfo}>
-                        <Text style={styles.sessionScore}>Skor: {session.score}</Text>
-                        <Text style={styles.sessionLevel}>Level: {session.level}</Text>
-                      </View>
-                      <Text style={styles.sessionDate}>{formatDate(session.playedAt)}</Text>
+                  <Text style={styles.sectionSubtitle}>10 Sesi Permainan Terakhir</Text>
+                  <View style={styles.sessionTable}>
+                    <View style={styles.sessionHeaderRow}>
+                      <Text style={[styles.sessionHeaderCell, { flex: 1.5 }]}>Waktu</Text>
+                      <Text style={styles.sessionHeaderCell}>Skor</Text>
+                      <Text style={styles.sessionHeaderCell}>Level</Text>
                     </View>
-                  ))}
+                    {sessions.map((session) => (
+                      <View key={session.id} style={styles.sessionRow}>
+                        <Text style={[styles.sessionCell, { flex: 1.5, color: COLORS.secondaryText }]}>{formatDate(session.playedAt)}</Text>
+                        <Text style={[styles.sessionCell, { fontWeight: 'bold', color: COLORS.primary }]}>{session.score}</Text>
+                        <Text style={[styles.sessionCell, { color: COLORS.accent }]}>{session.level}</Text>
+                      </View>
+                    ))}
+                  </View>
                 </>
+              ) : (
+                <Text style={[styles.emptySubtext, { marginTop: 20, color: COLORS.secondaryText }]}>Belum ada riwayat permainan untuk pemain ini.</Text>
               )}
             </View>
           )}
@@ -266,7 +318,7 @@ export default function LeaderboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1a1a2e',
+    backgroundColor: COLORS.darkBackground,
   },
   header: {
     flexDirection: 'row',
@@ -274,20 +326,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    borderBottomColor: COLORS.cardBackground,
   },
   backButton: {
     marginRight: 15,
-  },
-  backButtonText: {
-    color: '#4ecdc4',
-    fontSize: 16,
-    fontWeight: 'bold',
+    padding: 5,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
+    color: COLORS.text,
+    marginLeft: 5,
   },
   centerContainer: {
     flex: 1,
@@ -295,18 +344,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    color: '#fff',
+    color: COLORS.text,
     fontSize: 16,
+    marginTop: 10,
   },
   emptyText: {
-    color: '#fff',
+    color: COLORS.text,
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 10,
   },
   emptySubtext: {
-    color: '#999',
+    color: COLORS.secondaryText,
     fontSize: 14,
+    textAlign: 'center',
+    paddingHorizontal: 20,
   },
   scrollView: {
     flex: 1,
@@ -320,106 +372,82 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#fff',
+    color: COLORS.text,
     marginBottom: 15,
   },
   sectionSubtitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#4ecdc4',
+    color: COLORS.accent,
     marginTop: 20,
     marginBottom: 10,
   },
+  // PLAYER CARD STYLES
   playerCard: {
     flexDirection: 'row',
-    backgroundColor: '#2a2a3e',
+    backgroundColor: COLORS.cardBackground,
     borderRadius: 10,
     padding: 15,
     marginBottom: 10,
     alignItems: 'center',
+    borderLeftWidth: 4,
+    borderLeftColor: 'transparent',
+    // Shadow di iOS dan Android
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   selectedCard: {
-    backgroundColor: '#3a3a4e',
-    borderWidth: 2,
-    borderColor: '#4ecdc4',
+    borderColor: COLORS.accent,
+    backgroundColor: '#38425F', // Sedikit lebih terang dari cardBackground
+  },
+  firstRankCard: {
+    borderLeftColor: COLORS.primary,
   },
   rankContainer: {
     width: 40,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  rankText: {
-    fontSize: 20,
+  rankNumberText: {
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#fff',
+    color: COLORS.secondaryText,
   },
   playerInfo: {
     flex: 1,
     marginLeft: 15,
+    marginRight: 10,
   },
   playerName: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 5,
+    color: COLORS.text,
+    marginBottom: 3,
   },
   playerStats: {
-    fontSize: 12,
-    color: '#999',
+    fontSize: 11,
+    color: COLORS.secondaryText,
   },
   scoreContainer: {
     alignItems: 'flex-end',
+    minWidth: 70,
+  },
+  scoreLabel: {
+    fontSize: 10,
+    color: COLORS.secondaryText,
+    marginBottom: 2,
+    fontWeight: '600',
   },
   scoreText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#4ecdc4',
+    color: COLORS.primary, // Gunakan primary untuk skor
   },
-  statsCard: {
-    backgroundColor: '#2a2a3e',
-    borderRadius: 10,
-    padding: 20,
-    marginBottom: 20,
-  },
-  statRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333',
-  },
-  statLabel: {
-    fontSize: 14,
-    color: '#999',
-  },
-  statValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#4ecdc4',
-  },
-  sessionCard: {
-    backgroundColor: '#2a2a3e',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 10,
-  },
-  sessionInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 5,
-  },
-  sessionScore: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  sessionLevel: {
-    fontSize: 14,
-    color: '#4ecdc4',
-  },
-  sessionDate: {
-    fontSize: 12,
-    color: '#999',
-  },
+
+  // PLAYER DETAILS STYLES
   playerHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -427,16 +455,82 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   editButton: {
-    backgroundColor: '#95a5a6',
+    backgroundColor: COLORS.cardBackground,
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.accent,
   },
   editButtonText: {
-    color: '#fff',
+    color: COLORS.text,
     fontSize: 12,
     fontWeight: 'bold',
   },
+
+  // STATS GRID STYLES
+  statsCardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  statGridItem: {
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: 8,
+    padding: 15,
+    width: '48%', // Untuk dua kolom
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: COLORS.secondaryText,
+    marginBottom: 5,
+    textAlign: 'center',
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+    textAlign: 'center',
+  },
+
+  // SESSIONS TABLE STYLES
+  sessionTable: {
+    backgroundColor: COLORS.cardBackground,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  sessionHeaderRow: {
+    flexDirection: 'row',
+    backgroundColor: '#38425F',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  sessionHeaderCell: {
+    flex: 1,
+    color: COLORS.text,
+    fontWeight: 'bold',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  sessionRow: {
+    flexDirection: 'row',
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  sessionCell: {
+    flex: 1,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+
+  // MODAL STYLES
   modalOverlay: {
     position: 'absolute',
     top: 0,
@@ -449,11 +543,17 @@ const styles = StyleSheet.create({
     zIndex: 100,
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 20,
+    backgroundColor: COLORS.text,
+    borderRadius: 12,
+    padding: 25,
     minWidth: 300,
     maxWidth: '90%',
   },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.darkBackground,
+    marginBottom: 20,
+    textAlign: 'center',
+  }
 });
-

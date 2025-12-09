@@ -1,19 +1,10 @@
-/**
+/*
  * ============================================
  * WATERMARK DEVELOPER
  * ============================================
- * Nama        : Edi Suherlan
- * GitHub      : github/edisuherlan
- * Email       : audhighasu@gmail.com
- * Website     : audhighasu.com
+ * Nama        : Dendi Pratama Riawan
+ * GitHub      : github/DendiPratamaRiawan
  * ============================================
- * 
- * FILE: components/external-link.tsx
- * DESKRIPSI: Komponen link eksternal yang membuka URL di browser in-app
- * 
- * Komponen ini adalah wrapper untuk Link dari expo-router yang membuka URL eksternal
- * di browser in-app (bukan browser default). Di web, link akan dibuka di tab baru.
- * Di mobile (iOS/Android), link akan dibuka di browser in-app yang terintegrasi dengan aplikasi.
  */
 
 // Import Href dan Link dari expo-router untuk navigasi dan routing

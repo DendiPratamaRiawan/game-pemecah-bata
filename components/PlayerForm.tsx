@@ -1,18 +1,10 @@
-/**
+/*
  * ============================================
  * WATERMARK DEVELOPER
  * ============================================
- * Nama        : Edi Suherlan
- * GitHub      : github/edisuherlan
- * Email       : audhighasu@gmail.com
- * Website     : audhighasu.com
+ * Nama        : Dendi Pratama Riawan
+ * GitHub      : github/DendiPratamaRiawan
  * ============================================
- * 
- * FILE: components/PlayerForm.tsx
- * DESKRIPSI: Komponen form untuk input nama pemain
- * 
- * Komponen ini digunakan untuk memasukkan atau mengubah nama pemain.
- * Memiliki validasi untuk memastikan nama tidak kosong dan dalam batas karakter yang ditentukan.
  */
 
 // Import React dan hook useState untuk state management

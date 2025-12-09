@@ -1,22 +1,10 @@
-/**
+/*
  * ============================================
  * WATERMARK DEVELOPER
  * ============================================
- * Nama        : Edi Suherlan
- * GitHub      : github/edisuherlan
- * Email       : audhighasu@gmail.com
- * Website     : audhighasu.com
+ * Nama        : Dendi Pratama Riawan
+ * GitHub      : github/DendiPratamaRiawan
  * ============================================
- * 
- * FILE: app/(tabs)/_layout.tsx
- * DESKRIPSI: Layout untuk tab navigation aplikasi
- * 
- * File ini mendefinisikan struktur navigasi tab di aplikasi.
- * Menggunakan expo-router untuk routing dan menampilkan 4 tab utama:
- * - Game: Halaman utama untuk bermain game
- * - Pengaturan: Halaman pengaturan tingkat kesulitan
- * - Leaderboard: Halaman papan peringkat pemain
- * - Info: Halaman informasi developer
  */
 
 // Import komponen Tabs dari expo-router untuk membuat tab navigation

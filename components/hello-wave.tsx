@@ -1,19 +1,10 @@
-/**
+/*
  * ============================================
  * WATERMARK DEVELOPER
  * ============================================
- * Nama        : Edi Suherlan
- * GitHub      : github/edisuherlan
- * Email       : audhighasu@gmail.com
- * Website     : audhighasu.com
+ * Nama        : Dendi Pratama Riawan
+ * GitHub      : github/DendiPratamaRiawan
  * ============================================
- * 
- * FILE: components/hello-wave.tsx
- * DESKRIPSI: Komponen animasi emoji wave (👋) dengan efek rotasi
- * 
- * Komponen ini menampilkan emoji wave yang beranimasi dengan rotasi.
- * Animasi ini memberikan efek visual yang menarik dan ramah untuk menyambut user.
- * Emoji akan berputar beberapa kali saat pertama kali ditampilkan.
  */
 
 // Import Animated dari react-native-reanimated untuk animasi performa tinggi

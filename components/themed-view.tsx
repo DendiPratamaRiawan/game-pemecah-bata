@@ -1,20 +1,10 @@
-/**
+/*
  * ============================================
  * WATERMARK DEVELOPER
  * ============================================
- * Nama        : Edi Suherlan
- * GitHub      : github/edisuherlan
- * Email       : audhighasu@gmail.com
- * Website     : audhighasu.com
+ * Nama        : Dendi Pratama Riawan
+ * GitHub      : github/DendiPratamaRiawan
  * ============================================
- * 
- * FILE: components/themed-view.tsx
- * DESKRIPSI: Komponen View yang mendukung theme (light/dark mode)
- * 
- * Komponen ini adalah wrapper untuk View dari React Native yang secara otomatis
- * menyesuaikan warna background berdasarkan tema sistem (light/dark mode).
- * Komponen ini memungkinkan developer untuk menentukan warna berbeda untuk
- * light mode dan dark mode dengan mudah.
  */
 
 // Import View dan ViewProps dari React Native

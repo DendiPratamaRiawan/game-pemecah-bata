@@ -1,19 +1,10 @@
-/**
+/*
  * ============================================
  * WATERMARK DEVELOPER
  * ============================================
- * Nama        : Edi Suherlan
- * GitHub      : github/edisuherlan
- * Email       : audhighasu@gmail.com
- * Website     : audhighasu.com
+ * Nama        : Dendi Pratama Riawan
+ * GitHub      : github/DendiPratamaRiawan
  * ============================================
- * 
- * FILE: app/modal.tsx
- * DESKRIPSI: Screen modal yang muncul sebagai overlay di atas navigasi utama
- * 
- * Halaman ini adalah contoh screen modal yang dapat dipanggil dari screen lain.
- * Modal muncul sebagai overlay di atas navigasi tabs dan dapat ditutup dengan
- * menekan link atau menggunakan gesture dismiss (swipe down di iOS).
  */
 
 // Import Link dari expo-router untuk navigasi dan linking

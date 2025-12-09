@@ -1,892 +1,732 @@
-/**
+/*
  * ============================================
  * WATERMARK DEVELOPER
  * ============================================
- * Nama        : Edi Suherlan
- * GitHub      : github/edisuherlan
- * Email       : audhighasu@gmail.com
- * Website     : audhighasu.com
+ * Nama        : Dendi Pratama Riawan
+ * GitHub      : github/DendiPratamaRiawan
  * ============================================
- * 
- * FILE: app/(tabs)/index.tsx
- * DESKRIPSI: Halaman utama game Breakout/Pemecah Bata
- * 
- * Game ini adalah game breakout sederhana dimana pemain harus menghancurkan semua bata
- * dengan menggunakan bola yang dipantulkan oleh paddle di bagian bawah layar.
- * 
- * FITUR:
- * - Sistem level progresif dengan pola bata berbeda setiap level
- * - Leaderboard lokal untuk menyimpan skor pemain
- * - Pengaturan tingkat kesulitan (mudah, sedang, sulit)
- * - Sistem skor dan high score
- * - Fitur ganti nama pemain
  */
-
-// Import komponen PlayerForm untuk form input nama pemain
 import PlayerForm from '@/components/PlayerForm';
-// Import fungsi-fungsi database untuk mengelola data pemain dan skor
-import { getAllPlayers, getOrCreatePlayer, initDatabase, Player, updatePlayerName, updatePlayerScore } from '@/utils/database';
-// Import AsyncStorage untuk penyimpanan data lokal yang persisten
+import { getOrCreatePlayer, initDatabase, Player, updatePlayerName, updatePlayerScore } from '@/utils/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-// Import hook navigasi dari expo-router untuk routing antar halaman
 import { useFocusEffect, useRouter } from 'expo-router';
-// Import StatusBar untuk mengatur tampilan status bar di perangkat
 import { StatusBar } from 'expo-status-bar';
-// Import hook React untuk state management dan side effects
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-// Import komponen React Native untuk UI dan animasi
 import {
-  Animated, // Untuk animasi smooth pada bola dan paddle
-  Dimensions, // Untuk mendapatkan dimensi layar
-  StyleSheet, // Untuk membuat style sheet
-  Text, // Komponen teks
-  TouchableOpacity, // Komponen button yang bisa ditekan
-  View // Komponen container/view
+  Animated,
+  Dimensions,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
-// Import hook untuk mendapatkan safe area insets (untuk notch/status bar)
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// Mendapatkan dimensi layar untuk perhitungan posisi game
+// ============================================
+// KONSTANTA WARNA BARU (Dark Mode Schema)
+// ============================================
+const COLORS = {
+  darkBackground: '#1A1A2E', // Dark Blue/Ungu Gelap
+  cardBackground: '#2E3A59', // Latar belakang elemen/kartu
+  primary: '#FFC72C',        // Bright Gold/Aksen Utama
+  text: '#FFFFFF',           // Teks utama
+  secondaryText: '#A0A0B0',  // Teks sekunder
+  danger: '#E74C3C',         // Merah untuk Game Over/Bahaya
+  paddle: '#4ECDC4',         // Warna Paddle (Cyan)
+};
+
+// ============================================
+// KONSTANTA PENGATURAN DEFAULT DAN KEY
+// ============================================
+const DEFAULT_BALL_SPEED = 6;
+const SETTINGS_KEY = '@pemecah_bata:settings';
+
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // ============================================
-// KONSTANTA GAME
+// KONSTANTA GAME LAIN
 // ============================================
-const BALL_SIZE = 20;              // Ukuran bola dalam piksel
-const PADDLE_WIDTH = 120;          // Lebar paddle dalam piksel
-const PADDLE_HEIGHT = 15;          // Tinggi paddle dalam piksel
-const BRICK_WIDTH = 70;            // Lebar bata dalam piksel
-const BRICK_HEIGHT = 30;           // Tinggi bata dalam piksel
-const BRICK_ROWS = 5;              // Jumlah baris bata untuk level 1
-const BRICK_COLS = 5;              // Jumlah kolom bata untuk level 1
-const BRICK_SPACING = 5;           // Jarak antar bata dalam piksel
-const DEFAULT_BALL_SPEED = 6;      // Kecepatan default bola
-const PADDLE_SPEED = 15;           // Kecepatan paddle saat digerakkan
+const BALL_SIZE = 20;
+const DEFAULT_PADDLE_WIDTH = 120;
+const WIDE_PADDLE_WIDTH = 180;
+const PADDLE_HEIGHT = 15;
+const BRICK_WIDTH = 55;
+const BRICK_HEIGHT = 25;
+const BRICK_SPACING = 5;
+const FAST_BALL_SPEED = 9;
+const PADDLE_SPEED = 15;
+const POWER_UP_SIZE = 25;
+const POWER_UP_SPEED = 3;
+const POWER_UP_DURATION = 5000;
+const MAX_LIVES = 3;
+const POWER_UP_DROP_CHANCE = 0.1;
+const CONTROL_AREA_HEIGHT = 80;
 
 // ============================================
 // INTERFACE/TIPE DATA
 // ============================================
-/**
- * Interface untuk bata/brick
- */
 interface Brick {
-  id: number;           // ID unik bata
-  x: number;            // Posisi X bata (dari kiri)
-  y: number;            // Posisi Y bata (dari atas)
-  destroyed: boolean;   // Status apakah bata sudah dihancurkan
+  id: number;
+  x: number;
+  y: number;
+  destroyed: boolean;
+  hitsRequired: number;
+}
+
+type PowerUpType = 'speed' | 'wide_paddle';
+
+interface PowerUp {
+  id: number;
+  type: PowerUpType;
+  x: number;
+  y: number;
+  active: boolean;
+  velocityY: number;
 }
 
 // ============================================
 // KOMPONEN UTAMA GAME
 // ============================================
 export default function BreakoutGame() {
-  // Hook untuk mendapatkan safe area insets (untuk notch/status bar)
   const insets = useSafeAreaInsets();
-  const router = useRouter(); // Router untuk navigasi ke halaman lain
-  
+  const router = useRouter();
+
   // ============================================
   // STATE MANAGEMENT
   // ============================================
-  const [gameStarted, setGameStarted] = useState(false);      // Status apakah game sudah dimulai
-  const [gameOver, setGameOver] = useState(false);            // Status apakah game sudah berakhir
-  const [gameWon, setGameWon] = useState(false);              // Status apakah pemain menang (semua bata hancur)
-  const [score, setScore] = useState(0);                      // Skor saat ini
-  const scoreRef = useRef(0);                                 // Ref untuk tracking skor (untuk akses di game loop)
-  const [highScore, setHighScore] = useState(0);             // Skor tertinggi pemain
-  const [level, setLevel] = useState(1);                      // Level saat ini
-  const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null); // Data pemain saat ini
-  const [showPlayerForm, setShowPlayerForm] = useState(true);            // Tampilkan form input nama pemain
-  const [showChangeNameForm, setShowChangeNameForm] = useState(false);    // Tampilkan form ganti nama
-  const [dbInitialized, setDbInitialized] = useState(false);             // Status inisialisasi database
-  const [ballSpeed, setBallSpeed] = useState(DEFAULT_BALL_SPEED);         // Kecepatan bola (dari pengaturan)
+  const [gameStarted, setGameStarted] = useState(false);
+  const [gameOver, setGameOver] = useState(false);
+  const [gameWon, setGameWon] = useState(false);
+  const [score, setScore] = useState(0);
+  const scoreRef = useRef(0);
+  const [highScore, setHighScore] = useState(0);
+  const [level, setLevel] = useState(1);
+  const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
+  const [showPlayerForm, setShowPlayerForm] = useState(true);
+  const [showChangeNameForm, setShowChangeNameForm] = useState(false);
+  const [dbInitialized, setDbInitialized] = useState(false);
+  
+  const [ballSpeedSetting, setBallSpeedSetting] = useState(DEFAULT_BALL_SPEED);
+  
+  const [lives, setLives] = useState(MAX_LIVES);
+  const [paddleWidth, setPaddleWidth] = useState(DEFAULT_PADDLE_WIDTH);
+  const [activePowerUps, setActivePowerUps] = useState<PowerUp[]>([]);
+  const powerUpTimerRef = useRef<any>(null);
+  
+  const ballSpeedRef = useRef(DEFAULT_BALL_SPEED); 
+
+  // ============================================
+  // KONTROL PADDLE JOYSTICK
+  // ============================================
+  const [paddleMoveDirection, setPaddleMoveDirection] = useState<'left' | 'right' | null>(null);
+  const paddleIntervalRef = useRef<any>(null); 
 
   // ============================================
   // REF UNTUK POSISI DAN VELOCITY BOLA
   // ============================================
-  // Animated.Value untuk animasi posisi bola (digunakan untuk rendering)
   const ballX = useRef(new Animated.Value(SCREEN_WIDTH / 2 - BALL_SIZE / 2)).current;
   const ballY = useRef(new Animated.Value(SCREEN_HEIGHT * 0.6)).current;
-  
-  // Ref untuk posisi aktual bola (digunakan untuk perhitungan collision)
   const ballXPos = useRef(SCREEN_WIDTH / 2 - BALL_SIZE / 2);
   const ballYPos = useRef(SCREEN_HEIGHT * 0.6);
-  
-  // Ref untuk velocity (kecepatan) bola
-  const velocityX = useRef(DEFAULT_BALL_SPEED);  // Kecepatan horizontal
-  const velocityY = useRef(-DEFAULT_BALL_SPEED); // Kecepatan vertikal (negatif = ke atas)
+  const velocityX = useRef(DEFAULT_BALL_SPEED); 
+  const velocityY = useRef(-DEFAULT_BALL_SPEED);
 
   // ============================================
   // REF UNTUK POSISI PADDLE
   // ============================================
-  // Animated.Value untuk animasi posisi paddle
-  const paddleX = useRef(new Animated.Value(SCREEN_WIDTH / 2 - PADDLE_WIDTH / 2)).current;
-  // Ref untuk posisi aktual paddle
-  const paddleXPos = useRef(SCREEN_WIDTH / 2 - PADDLE_WIDTH / 2);
+  const paddleX = useRef(new Animated.Value(SCREEN_WIDTH / 2 - DEFAULT_PADDLE_WIDTH / 2)).current;
+  const paddleXPos = useRef(SCREEN_WIDTH / 2 - DEFAULT_PADDLE_WIDTH / 2);
 
   // ============================================
   // STATE UNTUK BRICKS/BATA
   // ============================================
-  const [bricks, setBricks] = useState<Brick[]>([]); // Array bata yang ada di layar
+  const [bricks, setBricks] = useState<Brick[]>([]);
+  const gameLoopRef = useRef<any>(null);
 
   // ============================================
-  // REF UNTUK GAME LOOP
+  // HANDLER PADDLE JOYSTICK
   // ============================================
-  const gameLoopRef = useRef<any>(null); // Ref untuk menyimpan ID game loop (untuk cancel jika perlu)
+  const movePaddle = (direction: 'left' | 'right') => {
+    let newX = paddleXPos.current;
+    const currentPaddleWidth = paddleWidth;
 
-  // ============================================
-  // HANDLER UNTUK KONTROL PADDLE
-  // ============================================
-  /**
-   * Handler saat layar disentuh (touch start)
-   * Jika game belum dimulai, mulai game
-   */
-  const handleTouchStart = (evt: any) => {
-    if (!gameStarted) {
-      startGame();
-      return;
+    if (direction === 'left') {
+      newX = newX - PADDLE_SPEED;
+    } else if (direction === 'right') {
+      newX = newX + PADDLE_SPEED;
     }
-  };
 
-  /**
-   * Handler saat jari digeser di layar (touch move)
-   * Menggerakkan paddle mengikuti posisi jari
-   */
-  const handleTouchMove = (evt: any) => {
-    // Jika game belum dimulai atau sudah berakhir, tidak lakukan apa-apa
-    if (!gameStarted || gameOver) return;
-    
-    // Ambil posisi X dari sentuhan (relatif terhadap View)
-    const touchX = evt.nativeEvent.locationX;
-    
-    // Validasi posisi touch
-    if (touchX === undefined || touchX === null) return;
-    
-    // Posisikan paddle di tengah posisi sentuhan
-    let newX = touchX - PADDLE_WIDTH / 2;
-    
-    // Batasi paddle agar tidak keluar dari batas layar
-    newX = Math.max(0, Math.min(SCREEN_WIDTH - PADDLE_WIDTH, newX));
-    
-    // Update posisi paddle
+    newX = Math.max(0, Math.min(SCREEN_WIDTH - currentPaddleWidth, newX));
+
     paddleXPos.current = newX;
     paddleX.setValue(newX);
   };
 
-  // ============================================
-  // EFFECT UNTUK INISIALISASI BRICKS SAAT LEVEL BERUBAH
-  // ============================================
-  /**
-   * Effect yang dijalankan setiap kali level berubah
-   * Menginisialisasi ulang bata dengan pola sesuai level
-   */
-  useEffect(() => {
-    initializeBricks();
-  }, [level]);
+  const handlePaddleStart = (direction: 'left' | 'right') => {
+    if (!gameStarted || gameOver) return;
 
-  // ============================================
-  // EFFECT UNTUK INISIALISASI SAAT KOMPONEN MOUNT
-  // ============================================
-  /**
-   * Effect yang dijalankan sekali saat komponen pertama kali dimuat
-   * - Inisialisasi database
-   * - Memuat pengaturan game
-   */
-  useEffect(() => {
-    // Fungsi untuk inisialisasi database
-    const initDb = async () => {
-      try {
-        // Tambahkan delay kecil untuk memastikan app sudah fully loaded
-        await new Promise(resolve => setTimeout(resolve, 100));
-        await initDatabase();
-        setDbInitialized(true);
-      } catch (error) {
-        console.error('Failed to initialize database:', error);
-        // Coba lagi setelah delay jika gagal pertama kali
-        setTimeout(async () => {
-          try {
-            await initDatabase();
-            setDbInitialized(true);
-          } catch (retryError) {
-            console.error('Failed to initialize database on retry:', retryError);
-          }
-        }, 1000);
-      }
-    };
-    initDb();
-    
-    // Memuat pengaturan game saat komponen mount
-    loadGameSettings();
-  }, []);
+    if (paddleIntervalRef.current) {
+      clearInterval(paddleIntervalRef.current);
+    }
+
+    setPaddleMoveDirection(direction);
+
+    movePaddle(direction);
+    paddleIntervalRef.current = setInterval(() => {
+      movePaddle(direction);
+    }, 16);
+  };
+
+  const handlePaddleEnd = () => {
+    if (paddleIntervalRef.current) {
+      clearInterval(paddleIntervalRef.current);
+      paddleIntervalRef.current = null;
+    }
+    setPaddleMoveDirection(null);
+  };
 
   /**
-   * Fungsi untuk memuat pengaturan game dari AsyncStorage
-   * Mengambil kecepatan bola yang telah disimpan
+   * Handler saat layar disentuh (hanya untuk memulai game)
    */
-  const loadGameSettings = async () => {
-    try {
-      const settingsData = await AsyncStorage.getItem('@pemecah_bata:settings');
-      if (settingsData) {
-        const settings = JSON.parse(settingsData);
-        const newSpeed = settings.ballSpeed || DEFAULT_BALL_SPEED;
-        console.log('Loading game settings, ballSpeed:', newSpeed);
-        setBallSpeed(newSpeed);
+  const handleTouchStart = () => {
+    if (!gameStarted && !gameOver && !showPlayerForm && !showChangeNameForm && lives > 0) {
+      if (lives < MAX_LIVES) {
+        startNextLife();
       } else {
-        // Pengaturan default jika belum ada yang disimpan
-        setBallSpeed(DEFAULT_BALL_SPEED);
+        startGame(true);
       }
-    } catch (error) {
-      console.error('Error loading game settings:', error);
+      return;
     }
   };
 
   // ============================================
-  // EFFECT UNTUK UPDATE VELOCITY BOLA SAAT BALLSPEED BERUBAH
+  // EFFECT DAN INITIALIZATION
   // ============================================
-  /**
-   * Effect yang dijalankan saat ballSpeed berubah
-   * Mengupdate velocity bola agar sesuai dengan kecepatan baru
-   * Hanya dijalankan jika game sedang berjalan
-   */
   useEffect(() => {
-    if (gameStarted && !gameOver) {
-      // Hitung kecepatan saat ini dari velocity X dan Y
-      const currentSpeed = Math.sqrt(velocityX.current ** 2 + velocityY.current ** 2);
-      if (currentSpeed > 0) {
-        // Hitung rasio kecepatan baru vs kecepatan saat ini
-        const ratio = ballSpeed / currentSpeed;
-        // Terapkan rasio ke velocity untuk mempertahankan arah tapi ubah kecepatan
-        velocityX.current *= ratio;
-        velocityY.current *= ratio;
-        console.log('Updated ball velocity to match new speed:', ballSpeed, 'ratio:', ratio);
-      }
-    }
-  }, [ballSpeed, gameStarted, gameOver]);
+    initializeBricks();
+  }, [level, paddleWidth]);
 
-  // ============================================
-  // EFFECT UNTUK RELOAD SETTINGS SAAT SCREEN FOCUS
-  // ============================================
+  useEffect(() => {
+    const initApp = async () => {
+      try {
+        await initDatabase();
+        setDbInitialized(true);
+        await loadGameSettings(); 
+      } catch (error) {
+        console.error('Failed to initialize database/settings:', error);
+      }
+    };
+    initApp();
+  }, []);
+
   /**
-   * Effect yang dijalankan setiap kali screen mendapat fokus
-   * Memuat ulang pengaturan game (setelah kembali dari halaman settings)
+   * FUNGSI BARU: Memuat pengaturan kecepatan bola dari AsyncStorage
    */
+  const loadGameSettings = async () => {
+    try {
+      const settingsData = await AsyncStorage.getItem(SETTINGS_KEY);
+      if (settingsData) {
+        const settings = JSON.parse(settingsData);
+        const newSpeed = settings.ballSpeed || DEFAULT_BALL_SPEED; 
+        
+        setBallSpeedSetting(newSpeed); 
+        ballSpeedRef.current = newSpeed; 
+        console.log("Settings loaded. Ball Speed:", newSpeed);
+      } else {
+        setBallSpeedSetting(DEFAULT_BALL_SPEED);
+        ballSpeedRef.current = DEFAULT_BALL_SPEED;
+      }
+    } catch (error) {
+      console.error('Error loading game settings:', error);
+      setBallSpeedSetting(DEFAULT_BALL_SPEED);
+      ballSpeedRef.current = DEFAULT_BALL_SPEED;
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
       loadGameSettings();
     }, [gameStarted, gameOver])
   );
 
+  useEffect(() => {
+    const currentSpeed = Math.sqrt(velocityX.current ** 2 + velocityY.current ** 2);
+    const targetSpeed = ballSpeedRef.current;
+    
+    if (gameStarted && !gameOver && currentSpeed > 0 && targetSpeed > 0) {
+        const ratio = targetSpeed / currentSpeed;
+        velocityX.current *= ratio;
+        velocityY.current *= ratio;
+    }
+  }, [ballSpeedRef.current]);
+
+
   // ============================================
-  // FUNGSI UNTUK INISIALISASI BRICKS/BATA
+  // FUNGSI INISIALISASI BRICKS (Sama)
   // ============================================
-  /**
-   * Fungsi untuk membuat dan mengatur posisi bata sesuai level
-   * Setiap level memiliki pola bata yang berbeda:
-   * - Level 1: Pola grid sederhana (5x5)
-   * - Level 2: Pola piramida (bata lebih banyak di bawah)
-   * - Level 3: Pola diamond (bentuk berlian)
-   * - Level 4+: Pola kompleks dengan celah-celah
-   */
   const initializeBricks = () => {
     const newBricks: Brick[] = [];
-    
-    // Pola berbeda untuk setiap level
-    if (level === 1) {
-      // Level 1: Pola grid sederhana (5x5)
-      const totalBrickWidth = BRICK_COLS * BRICK_WIDTH + (BRICK_COLS - 1) * BRICK_SPACING;
-      const startX = (SCREEN_WIDTH - totalBrickWidth) / 2; // Posisi X awal agar bata berada di tengah
-      const startY = 100 + insets.top; // Posisi Y awal (dari atas)
+    const cols = 7;
+    const rows = 6;
 
-      // Buat bata dalam pola grid
-      for (let row = 0; row < BRICK_ROWS; row++) {
-        for (let col = 0; col < BRICK_COLS; col++) {
-          newBricks.push({
-            id: row * BRICK_COLS + col, // ID unik berdasarkan posisi
-            x: startX + col * (BRICK_WIDTH + BRICK_SPACING), // Posisi X setiap bata
-            y: startY + row * (BRICK_HEIGHT + BRICK_SPACING), // Posisi Y setiap bata
-            destroyed: false, // Status awal: belum dihancurkan
-          });
-        }
+    const totalBrickWidth = cols * BRICK_WIDTH + (cols - 1) * BRICK_SPACING;
+    const startX = (SCREEN_WIDTH - totalBrickWidth) / 2;
+    const startY = 120 + insets.top; 
+
+    let brickIdCounter = 0;
+
+    for (let row = 0; row < rows; row++) {
+      let bricksInRow = cols;
+      let rowStartX = startX;
+      let hitsRequired = 1;
+
+      if (row < 2) {
+        hitsRequired = 2;
       }
-    } else if (level === 2) {
-      // Level 2: Pola piramida (lebih sulit - lebih banyak bata di bawah)
-      const cols = 6;
-      const rows = 5;
-      const totalBrickWidth = cols * BRICK_WIDTH + (cols - 1) * BRICK_SPACING;
-      const startX = (SCREEN_WIDTH - totalBrickWidth) / 2;
-      const startY = 100 + insets.top;
 
-      for (let row = 0; row < rows; row++) {
-        const bricksInRow = cols - row; // Jumlah bata berkurang setiap baris (membentuk piramida)
+      if (level === 1) {
+        if (row >= 6) continue;
+        bricksInRow = 6;
         const rowWidth = bricksInRow * BRICK_WIDTH + (bricksInRow - 1) * BRICK_SPACING;
-        const rowStartX = startX + (cols - bricksInRow) * (BRICK_WIDTH + BRICK_SPACING) / 2; // Tengahkan baris
-        
+        rowStartX = (SCREEN_WIDTH - rowWidth) / 2;
+      } else if (level === 2) {
+        bricksInRow = cols - Math.floor(row / 2);
+        if (bricksInRow < 1) continue;
+        const rowWidth = bricksInRow * BRICK_WIDTH + (bricksInRow - 1) * BRICK_SPACING;
+        rowStartX = (SCREEN_WIDTH - rowWidth) / 2;
+      } else if (level === 3) {
+        const distanceFromCenter = Math.abs(row - Math.floor(rows / 2));
+        bricksInRow = cols - distanceFromCenter * 2 + 1;
+        if (bricksInRow < 1) continue;
+        const rowWidth = bricksInRow * BRICK_WIDTH + (bricksInRow - 1) * BRICK_SPACING;
+        rowStartX = (SCREEN_WIDTH - rowWidth) / 2;
+      } else {
+        bricksInRow = 7;
         for (let col = 0; col < bricksInRow; col++) {
+          const skipPattern = (row % 2 === 0 && col % 2 !== 0) || (row % 3 === 1 && col % 3 === 0);
+          if (skipPattern) continue;
+
           newBricks.push({
-            id: row * 100 + col,
-            x: rowStartX + col * (BRICK_WIDTH + BRICK_SPACING),
+            id: brickIdCounter++,
+            x: startX + col * (BRICK_WIDTH + BRICK_SPACING),
             y: startY + row * (BRICK_HEIGHT + BRICK_SPACING),
             destroyed: false,
+            hitsRequired: row < 3 ? 2 : 1,
           });
         }
+        continue;
       }
-    } else if (level === 3) {
-      // Level 3: Pola diamond/berlian (lebih sulit)
-      const cols = 7;
-      const rows = 6;
-      const totalBrickWidth = cols * BRICK_WIDTH + (cols - 1) * BRICK_SPACING;
-      const startX = (SCREEN_WIDTH - totalBrickWidth) / 2;
-      const startY = 100 + insets.top;
 
-      for (let row = 0; row < rows; row++) {
-        const center = Math.floor(cols / 2); // Titik tengah
-        const distanceFromCenter = Math.abs(row - Math.floor(rows / 2)); // Jarak dari tengah
-        const bricksInRow = cols - distanceFromCenter * 2; // Jumlah bata berkurang dari tengah
-        const rowStartX = startX + distanceFromCenter * (BRICK_WIDTH + BRICK_SPACING); // Offset untuk tengahkan
-        
-        for (let col = 0; col < bricksInRow; col++) {
-          newBricks.push({
-            id: row * 100 + col,
-            x: rowStartX + col * (BRICK_WIDTH + BRICK_SPACING),
-            y: startY + row * (BRICK_HEIGHT + BRICK_SPACING),
-            destroyed: false,
-          });
-        }
-      }
-    } else {
-      // Level 4+: Pola kompleks dengan celah-celah (paling sulit)
-      const cols = 8;
-      const rows = 6;
-      const totalBrickWidth = cols * BRICK_WIDTH + (cols - 1) * BRICK_SPACING;
-      const startX = (SCREEN_WIDTH - totalBrickWidth) / 2;
-      const startY = 100 + insets.top;
-
-      for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-          // Buat pola dengan celah - skip beberapa bata untuk membuat lebih sulit
-          const skipPattern = (row + col) % 3 === 0 || (row % 2 === 0 && col % 2 === 0);
-          if (!skipPattern) {
-            newBricks.push({
-              id: row * 100 + col,
-              x: startX + col * (BRICK_WIDTH + BRICK_SPACING),
-              y: startY + row * (BRICK_HEIGHT + BRICK_SPACING),
-              destroyed: false,
-            });
-          }
-        }
+      for (let col = 0; col < bricksInRow; col++) {
+        newBricks.push({
+          id: brickIdCounter++,
+          x: rowStartX + col * (BRICK_WIDTH + BRICK_SPACING),
+          y: startY + row * (BRICK_HEIGHT + BRICK_SPACING),
+          destroyed: false,
+          hitsRequired: hitsRequired,
+        });
       }
     }
 
-    // Simpan bata ke state
     setBricks(newBricks);
   };
-
-  /**
-   * Handler untuk submit form nama pemain
-   * Fungsi ini dipanggil ketika user memasukkan nama di form awal
-   * @param name - Nama pemain yang dimasukkan
-   * 
-   * Proses:
-   * 1. Pastikan database sudah diinisialisasi
-   * 2. Cari pemain dengan nama tersebut atau buat baru jika belum ada
-   * 3. Set pemain sebagai current player
-   * 4. Sembunyikan form dan tampilkan game
-   * 5. Load high score pemain tersebut
-   */
+  
+  // ============================================
+  // HANDLER PEMAIN (Sama)
+  // ============================================
   const handlePlayerSubmit = async (name: string) => {
     try {
-      console.log('handlePlayerSubmit called with name:', name);
-      
-      // Pastikan database sudah diinisialisasi sebelum melakukan operasi
-      // Jika belum, inisialisasi terlebih dahulu
-      if (!dbInitialized) {
-        console.log('Initializing database...');
-        await initDatabase();
-        setDbInitialized(true);
-      }
-      
-      console.log('Getting or creating player...');
-      // Ambil pemain yang sudah ada dengan nama tersebut atau buat baru jika belum ada
-      // Fungsi ini akan mengembalikan player object yang sudah ada atau yang baru dibuat
+      if (!dbInitialized) await initDatabase();
       const player = await getOrCreatePlayer(name);
-      console.log('Player received:', player);
-      
-      // Set pemain saat ini sebagai current player untuk digunakan di seluruh game
       setCurrentPlayer(player);
-      // Sembunyikan form input nama karena sudah ada pemain
       setShowPlayerForm(false);
-      // Set high score pemain untuk ditampilkan di layar
       setHighScore(player.highScore);
-      
-      // Verifikasi pemain sudah tersimpan dengan benar di database
-      // Ini untuk debugging dan memastikan data tersimpan
-      const allPlayers = await getAllPlayers();
-      console.log('All players after creation:', allPlayers.length, allPlayers);
     } catch (error) {
-      // Jika terjadi error, log ke console dan tampilkan pesan error ke user
       console.error('Error creating/getting player:', error);
       alert('Gagal memuat database. Silakan coba lagi.');
     }
   };
 
-  /**
-   * Handler untuk mengganti nama pemain
-   * Fungsi ini dipanggil ketika user ingin mengubah nama mereka
-   * @param newName - Nama baru yang ingin digunakan
-   * 
-   * Proses:
-   * 1. Validasi bahwa ada current player
-   * 2. Update nama di database menggunakan ID pemain
-   * 3. Update state current player dengan data terbaru
-   * 4. Sembunyikan form ganti nama
-   * 5. Tampilkan konfirmasi sukses
-   */
   const handleChangeName = async (newName: string) => {
-    // Jika tidak ada current player, tidak lakukan apa-apa
     if (!currentPlayer) return;
-    
     try {
-      // Update nama pemain di database menggunakan ID pemain saat ini
-      // Fungsi ini akan memvalidasi nama tidak duplikat dan mengembalikan player yang sudah diupdate
       const updatedPlayer = await updatePlayerName(currentPlayer.id, newName);
-      // Update state dengan data pemain yang sudah diupdate
       setCurrentPlayer(updatedPlayer);
-      // Sembunyikan form ganti nama karena proses sudah selesai
       setShowChangeNameForm(false);
-      // Tampilkan konfirmasi bahwa nama berhasil diubah
       alert('Nama berhasil diubah!');
     } catch (error: any) {
-      // Jika terjadi error, log ke console
       console.error('Error changing name:', error);
-      // Tampilkan pesan error ke user (bisa dari error message atau pesan default)
       alert(error.message || 'Gagal mengubah nama. Silakan coba lagi.');
     }
   };
 
+
   // ============================================
-  // FUNGSI UNTUK MEMULAI GAME
+  // FUNGSI UNTUK MEMULAI GAME / RESET BOLA
   // ============================================
-  /**
-   * Fungsi untuk memulai game baru
-   * @param resetToLevel1 - Jika true, reset ke level 1. Jika false, lanjut dari level terakhir
-   */
-  const startGame = (resetToLevel1: boolean = true) => {
-    if (!currentPlayer) {
-      setShowPlayerForm(true);
-      return;
-    }
-    
-    setGameStarted(true);
-    setGameOver(false);
-    setGameWon(false);
-    setScore(0);
-    scoreRef.current = 0;
-    
-    // Reset level to 1 if requested (default is true for new game)
-    if (resetToLevel1) {
-      setLevel(1);
-    }
-    
-    // Reset ball position
+  const resetBallAndPaddle = () => {
     const startX = SCREEN_WIDTH / 2 - BALL_SIZE / 2;
     const startY = SCREEN_HEIGHT * 0.6;
     ballXPos.current = startX;
     ballYPos.current = startY;
     ballX.setValue(startX);
     ballY.setValue(startY);
-    
-    // Random initial direction
-    velocityX.current = (Math.random() > 0.5 ? 1 : -1) * ballSpeed;
-    velocityY.current = -ballSpeed;
-    
-    // Reset paddle position
-    const paddleStartX = SCREEN_WIDTH / 2 - PADDLE_WIDTH / 2;
+
+    const currentBaseSpeed = ballSpeedSetting; 
+    ballSpeedRef.current = currentBaseSpeed;
+
+    velocityX.current = (Math.random() > 0.5 ? 1 : -1) * currentBaseSpeed;
+    velocityY.current = -currentBaseSpeed;
+
+    const paddleStartX = SCREEN_WIDTH / 2 - paddleWidth / 2;
     paddleXPos.current = paddleStartX;
     paddleX.setValue(paddleStartX);
-    
-    // Initialize bricks
+  }
+
+  const startGame = (resetToLevel1: boolean = true) => {
+    if (!currentPlayer) {
+      setShowPlayerForm(true);
+      return;
+    }
+
+    setGameStarted(true);
+    setGameOver(false);
+    setGameWon(false);
+    setScore(0);
+    scoreRef.current = 0;
+    setLives(MAX_LIVES);
+    setPaddleWidth(DEFAULT_PADDLE_WIDTH);
+    setActivePowerUps([]);
+    if(powerUpTimerRef.current) clearTimeout(powerUpTimerRef.current);
+
+    if (resetToLevel1) {
+      setLevel(1);
+    }
+
+    resetBallAndPaddle(); 
     initializeBricks();
-    
     gameLoop();
   };
 
-  /**
-   * Fungsi helper untuk memulai game dari level 1
-   * Fungsi ini dipanggil dari tombol "Mulai dari Level 1" di modal game over
-   * Memanggil startGame dengan parameter resetToLevel1 = true
-   */
   const startFromLevel1 = () => {
     startGame(true);
   };
 
-  /**
-   * Fungsi untuk mengecek semua collision yang terjadi dalam game
-   * Fungsi ini mengecek collision antara bola dengan:
-   * 1. Dinding kiri dan kanan
-   * 2. Dinding atas
-   * 3. Paddle (papan pemantul)
-   * 4. Bata/brick
-   * 
-   * Fungsi ini juga mengecek kondisi game over dan level complete
-   */
-  const checkCollisions = () => {
-    // Hitung posisi bounding box bola untuk collision detection
-    // Menggunakan posisi aktual dari ref, bukan dari animated value
-    const ballLeft = ballXPos.current;                    // Posisi X kiri bola
-    const ballRight = ballXPos.current + BALL_SIZE;       // Posisi X kanan bola
-    const ballTop = ballYPos.current;                    // Posisi Y atas bola
-    const ballBottom = ballYPos.current + BALL_SIZE;     // Posisi Y bawah bola
+  const startNextLife = () => {
+    if (lives > 0) {
+      setGameStarted(true);
+      setGameOver(false);
+      setGameWon(false);
+      
+      setPaddleWidth(DEFAULT_PADDLE_WIDTH);
+      setActivePowerUps([]);
+      if(powerUpTimerRef.current) clearTimeout(powerUpTimerRef.current);
+      
+      resetBallAndPaddle();
+      gameLoop();
+    }
+  };
 
-    // ============================================
-    // COLLISION DENGAN DINDING KIRI DAN KANAN
-    // ============================================
-    // Jika bola menyentuh dinding kiri (ballLeft <= 0) atau dinding kanan (ballRight >= SCREEN_WIDTH)
-    if (ballLeft <= 0 || ballRight >= SCREEN_WIDTH) {
-      // Balik arah horizontal (velocityX menjadi negatif dari sebelumnya)
-      velocityX.current *= -1;
-      // Perbaiki posisi bola agar tidak keluar dari batas layar
-      if (ballLeft <= 0) {
-        // Jika bola melewati dinding kiri, paksa posisi ke 0
-        ballXPos.current = 0;
-        ballX.setValue(0);
-      } else {
-        // Jika bola melewati dinding kanan, paksa posisi ke batas kanan layar
-        ballXPos.current = SCREEN_WIDTH - BALL_SIZE;
-        ballX.setValue(SCREEN_WIDTH - BALL_SIZE);
-      }
+  // ============================================
+  // APLIKASI POWER-UP
+  // ============================================
+  const activatePowerUp = (type: PowerUpType) => {
+    if (powerUpTimerRef.current) {
+      clearTimeout(powerUpTimerRef.current);
     }
 
-    // ============================================
-    // COLLISION DENGAN DINDING ATAS
-    // ============================================
-    // Jika bola menyentuh dinding atas (ballTop <= 0)
+    if (type === 'wide_paddle') {
+      setPaddleWidth(WIDE_PADDLE_WIDTH);
+      
+      powerUpTimerRef.current = setTimeout(() => {
+        setPaddleWidth(DEFAULT_PADDLE_WIDTH);
+        powerUpTimerRef.current = null;
+      }, POWER_UP_DURATION);
+    } else if (type === 'speed') {
+      ballSpeedRef.current = FAST_BALL_SPEED; 
+
+      powerUpTimerRef.current = setTimeout(() => {
+        ballSpeedRef.current = ballSpeedSetting; 
+        powerUpTimerRef.current = null;
+      }, POWER_UP_DURATION);
+    }
+  };
+
+  // ============================================
+  // FUNGSI CEK COLLISION (Sama)
+  // ============================================
+  const checkCollisions = () => {
+    const ballLeft = ballXPos.current;
+    const ballRight = ballXPos.current + BALL_SIZE;
+    const ballTop = ballYPos.current;
+    const ballBottom = ballYPos.current + BALL_SIZE;
+    
+    // --- COLLISION DENGAN DINDING KIRI/KANAN & ATAS ---
+    if (ballLeft <= 0 || ballRight >= SCREEN_WIDTH) {
+      velocityX.current *= -1;
+      if (ballLeft <= 0) ballXPos.current = 0;
+      else ballXPos.current = SCREEN_WIDTH - BALL_SIZE;
+      ballX.setValue(ballXPos.current);
+    }
+
     if (ballTop <= 0) {
-      // Balik arah vertikal (velocityY menjadi negatif dari sebelumnya)
       velocityY.current *= -1;
-      // Perbaiki posisi bola agar tidak keluar dari batas atas layar
       ballYPos.current = 0;
       ballY.setValue(0);
     }
 
-    // ============================================
-    // COLLISION DENGAN PADDLE (PAPAN PEMANTUL)
-    // ============================================
-    // Hitung posisi bounding box paddle untuk collision detection
-    const paddleLeft = paddleXPos.current;                                    // Posisi X kiri paddle
-    const paddleRight = paddleXPos.current + PADDLE_WIDTH;                    // Posisi X kanan paddle
-    const paddleTop = SCREEN_HEIGHT - PADDLE_HEIGHT - 30 - insets.bottom;     // Posisi Y atas paddle (30px dari bawah + safe area)
-    const paddleBottom = paddleTop + PADDLE_HEIGHT;                           // Posisi Y bawah paddle
+    // --- COLLISION DENGAN PADDLE (Y position disesuaikan) ---
+    const currentPaddleWidth = paddleWidth;
+    const paddleLeft = paddleXPos.current;
+    const paddleRight = paddleXPos.current + currentPaddleWidth;
+    const paddleTop = SCREEN_HEIGHT - PADDLE_HEIGHT - 30 - insets.bottom - CONTROL_AREA_HEIGHT; 
 
-    // Hanya cek collision jika bola bergerak ke bawah (menuju paddle)
-    // Jika bola bergerak ke atas, tidak perlu cek collision dengan paddle
     if (velocityY.current > 0) {
-      // Hitung posisi bola setelah frame ini (predictive collision detection)
-      // Ini mencegah bola melewati paddle karena kecepatan tinggi
-      const nextBallX = ballXPos.current + velocityX.current;        // Posisi X berikutnya
-      const nextBallY = ballYPos.current + velocityY.current;        // Posisi Y berikutnya
-      const nextBallLeft = nextBallX;                                 // Posisi X kiri berikutnya
-      const nextBallRight = nextBallX + BALL_SIZE;                    // Posisi X kanan berikutnya
-      const nextBallTop = nextBallY;                                  // Posisi Y atas berikutnya
-      const nextBallBottom = nextBallY + BALL_SIZE;                   // Posisi Y bawah berikutnya
-      
-      // Cek apakah ada overlap horizontal antara bola dan paddle
-      // Overlap terjadi jika bagian kanan bola > kiri paddle DAN bagian kiri bola < kanan paddle
+      const nextBallX = ballXPos.current + velocityX.current;
+      const nextBallY = ballYPos.current + velocityY.current;
+      const nextBallLeft = nextBallX;
+      const nextBallRight = nextBallX + BALL_SIZE;
+      const nextBallBottom = nextBallY + BALL_SIZE;
+
       const horizontalOverlap = nextBallRight > paddleLeft && nextBallLeft < paddleRight;
-      
-      // Cek apakah bola akan menabrak paddle menggunakan cek ketat
-      // Bola menabrak jika: ada overlap horizontal DAN bagian bawah bola >= atas paddle DAN bagian atas bola < bawah paddle
-      if (horizontalOverlap && nextBallBottom >= paddleTop && nextBallTop < paddleBottom) {
-        // Bola akan menabrak paddle - balik arah SEBELUM bola melewati paddle
+
+      if (horizontalOverlap && nextBallBottom >= paddleTop) {
         velocityY.current *= -1;
-        
-        // KRITIS: Posisikan bola TEPAT di atas paddle SEBELUM pergerakan
-        // Ini memastikan bola tidak pernah overlap dengan paddle dan terlihat melewati paddle
         ballYPos.current = paddleTop - BALL_SIZE;
         ballY.setValue(paddleTop - BALL_SIZE);
-        
-        // Tambahkan sudut pantulan berdasarkan di mana bola menabrak paddle
-        // Jika menabrak di tengah paddle, bola akan lurus ke atas
-        // Jika menabrak di kiri paddle, bola akan miring ke kiri
-        // Jika menabrak di kanan paddle, bola akan miring ke kanan
-        const ballCenterX = ballXPos.current + BALL_SIZE / 2;        // Titik tengah bola (X)
-        const hitPosition = Math.max(0, Math.min(1, (ballCenterX - paddleLeft) / PADDLE_WIDTH)); // Posisi hit (0-1)
-        // Hitung velocityX baru berdasarkan posisi hit (0.5 = tengah, 0 = kiri, 1 = kanan)
-        velocityX.current = (hitPosition - 0.5) * ballSpeed * 2;
-      }
-      
-      // KRITIS SAFETY CHECK: Jika bola entah bagaimana sudah overlap dengan paddle, perbaiki segera
-      // Ini adalah backup check untuk memastikan tidak ada bug visual
-      const currentHorizontalOverlap = ballRight > paddleLeft && ballLeft < paddleRight;
-      if (currentHorizontalOverlap && ballBottom > paddleTop) {
-        // Bola sudah di dalam paddle - paksa keluar ke posisi yang benar
-        ballYPos.current = paddleTop - BALL_SIZE;
-        ballY.setValue(paddleTop - BALL_SIZE);
-        // Jika bola masih bergerak ke bawah, balik arahnya
-        if (velocityY.current > 0) {
-          velocityY.current *= -1;
-        }
+
+        const ballCenterX = ballXPos.current + BALL_SIZE / 2;
+        const hitPosition = Math.max(0, Math.min(1, (ballCenterX - paddleLeft) / currentPaddleWidth));
+        velocityX.current = (hitPosition - 0.5) * ballSpeedRef.current * 2; 
       }
     }
 
-    // ============================================
-    // COLLISION DENGAN BRICKS (BATA)
-    // ============================================
-    // Update state bricks sambil mengecek collision dengan setiap bata
-    setBricks(prev => {
-      let brickDestroyed = false; // Flag untuk menandai apakah ada bata yang dihancurkan di frame ini
-      
-      // Map setiap bata untuk mengecek collision
-      const updatedBricks = prev.map(brick => {
-        // Jika bata sudah dihancurkan, skip pengecekan collision
-        if (brick.destroyed) return brick;
+    // --- COLLISION DENGAN BRICKS ---
+    let bricksUpdated = false;
+    let brickDestroyed = false;
 
-        // Hitung posisi bounding box bata untuk collision detection
-        const brickLeft = brick.x;                          // Posisi X kiri bata
-        const brickRight = brick.x + BRICK_WIDTH;           // Posisi X kanan bata
-        const brickTop = brick.y;                          // Posisi Y atas bata
-        const brickBottom = brick.y + BRICK_HEIGHT;         // Posisi Y bawah bata
+    const newBricks = bricks.map(brick => {
+      if (brick.destroyed) return brick;
 
-        // Cek apakah bola overlap dengan bata menggunakan AABB (Axis-Aligned Bounding Box) collision
-        // Overlap terjadi jika:
-        // - Bagian kanan bola > kiri bata DAN
-        // - Bagian kiri bola < kanan bata DAN
-        // - Bagian bawah bola > atas bata DAN
-        // - Bagian atas bola < bawah bata
-        if (
-          ballRight > brickLeft &&
-          ballLeft < brickRight &&
-          ballBottom > brickTop &&
-          ballTop < brickBottom
-        ) {
-          // Bola menabrak bata - tandai bahwa ada bata yang dihancurkan
+      const brickLeft = brick.x;
+      const brickRight = brick.x + BRICK_WIDTH;
+      const brickTop = brick.y;
+      const brickBottom = brick.y + BRICK_HEIGHT;
+
+      if (
+        ballRight > brickLeft &&
+        ballLeft < brickRight &&
+        ballBottom > brickTop &&
+        ballTop < brickBottom
+      ) {
+        bricksUpdated = true;
+        
+        const hitsLeft = brick.hitsRequired - 1;
+
+        if (hitsLeft <= 0) {
           brickDestroyed = true;
-          
-          // ============================================
-          // UPDATE SKOR SAAT BATA DIHANCURKAN
-          // ============================================
-          // Setiap bata yang dihancurkan memberikan 10 poin
           setScore(prevScore => {
-            const newScore = prevScore + 10; // Tambahkan 10 poin
-            scoreRef.current = newScore;      // Update ref untuk akses di game loop
-            // Jika skor baru lebih tinggi dari high score, update high score
-            if (newScore > highScore) {
-              setHighScore(newScore);
-            }
+            const newScore = prevScore + 20;
+            scoreRef.current = newScore;
+            if (newScore > highScore) setHighScore(newScore);
             return newScore;
           });
 
-          // ============================================
-          // PANTULAN BOLA SETELAH MENABRAK BATA
-          // ============================================
-          // Hitung pusat bola dan pusat bata untuk menentukan arah pantulan
-          const ballCenterX = ballXPos.current + BALL_SIZE / 2;      // Titik tengah bola (X)
-          const ballCenterY = ballYPos.current + BALL_SIZE / 2;      // Titik tengah bola (Y)
-          const brickCenterX = brick.x + BRICK_WIDTH / 2;            // Titik tengah bata (X)
-          const brickCenterY = brick.y + BRICK_HEIGHT / 2;           // Titik tengah bata (Y)
-
-          // Hitung jarak horizontal dan vertikal antara pusat bola dan pusat bata
-          const dx = ballCenterX - brickCenterX;  // Jarak horizontal
-          const dy = ballCenterY - brickCenterY;  // Jarak vertikal
-
-          // Tentukan arah pantulan berdasarkan jarak terbesar
-          // Jika jarak horizontal lebih besar, pantulkan secara horizontal
-          // Jika jarak vertikal lebih besar, pantulkan secara vertikal
-          if (Math.abs(dx) > Math.abs(dy)) {
-            velocityX.current *= -1; // Balik arah horizontal
-          } else {
-            velocityY.current *= -1; // Balik arah vertikal
+          if (Math.random() < POWER_UP_DROP_CHANCE) {
+            const types: PowerUpType[] = ['speed', 'wide_paddle'];
+            const randomType = types[Math.floor(Math.random() * types.length)];
+            setActivePowerUps(prev => [
+              ...prev,
+              {
+                id: Date.now() + Math.random(),
+                type: randomType,
+                x: brick.x + BRICK_WIDTH / 2 - POWER_UP_SIZE / 2,
+                y: brick.y,
+                active: true,
+                velocityY: POWER_UP_SPEED,
+              }
+            ]);
           }
 
-          // Tandai bata sebagai dihancurkan dan kembalikan bata yang sudah diupdate
+          const ballCenterX = ballXPos.current + BALL_SIZE / 2;
+          const ballCenterY = ballYPos.current + BALL_SIZE / 2;
+          const brickCenterX = brick.x + BRICK_WIDTH / 2;
+          const brickCenterY = brick.y + BRICK_HEIGHT / 2;
+          const dx = ballCenterX - brickCenterX;
+          const dy = ballCenterY - brickCenterY;
+
+          if (Math.abs(dx) > Math.abs(dy)) {
+            velocityX.current *= -1;
+          } else {
+            velocityY.current *= -1;
+          }
+
           return { ...brick, destroyed: true };
-        }
-
-        // Jika tidak ada collision, kembalikan bata tanpa perubahan
-        return brick;
-      });
-
-      // ============================================
-      // CEK APAKAH SEMUA BATA SUDAH DIHANCURKAN (LEVEL COMPLETE)
-      // ============================================
-      // Hitung jumlah bata yang masih tersisa (belum dihancurkan)
-      const remainingBricks = updatedBricks.filter(b => !b.destroyed).length;
-      // Jika tidak ada bata tersisa DAN ada bata yang dihancurkan di frame ini, level selesai!
-      if (remainingBricks === 0 && brickDestroyed) {
-        // Semua bata sudah dihancurkan - Level Complete!
-        // Gunakan setTimeout untuk memberikan delay sebelum naik level
-        // Ini memberikan waktu untuk animasi dan feedback visual
-        setTimeout(() => {
-          // Update level ke level berikutnya
-          setLevel(prevLevel => {
-            const newLevel = prevLevel + 1;
-            console.log('Level completed! Moving to level:', newLevel);
-            
-            // Reset posisi bola untuk level berikutnya
-            // Posisikan bola di tengah layar secara horizontal dan 60% dari atas secara vertikal
-            const startX = SCREEN_WIDTH / 2 - BALL_SIZE / 2;
-            const startY = SCREEN_HEIGHT * 0.6;
-            ballXPos.current = startX;
-            ballYPos.current = startY;
-            ballX.setValue(startX);
-            ballY.setValue(startY);
-            
-            // Reset velocity bola dengan arah acak untuk variasi gameplay
-            // Arah horizontal random (kiri atau kanan), arah vertikal selalu ke atas
-            velocityX.current = (Math.random() > 0.5 ? 1 : -1) * ballSpeed;
-            velocityY.current = -ballSpeed;
-            
-            return newLevel;
+        } else {
+          setScore(prevScore => {
+            const newScore = prevScore + 10;
+            scoreRef.current = newScore;
+            if (newScore > highScore) setHighScore(newScore);
+            return newScore;
           });
-          
-          // Inisialisasi bata baru untuk level berikutnya setelah state level diupdate
-          // Delay 100ms untuk memastikan state sudah terupdate
-          setTimeout(() => {
-            initializeBricks();
-          }, 100);
-        }, 300); // Delay 300ms sebelum naik level
-      }
 
-      // Kembalikan array bata yang sudah diupdate
-      return updatedBricks;
+          const ballCenterX = ballXPos.current + BALL_SIZE / 2;
+          const ballCenterY = ballYPos.current + BALL_SIZE / 2;
+          const brickCenterX = brick.x + BRICK_WIDTH / 2;
+          const brickCenterY = brick.y + BRICK_HEIGHT / 2;
+          const dx = ballCenterX - brickCenterX;
+          const dy = ballCenterY - brickCenterY;
+
+          if (Math.abs(dx) > Math.abs(dy)) {
+            velocityX.current *= -1;
+          } else {
+            velocityY.current *= -1;
+          }
+          
+          return { ...brick, hitsRequired: hitsLeft };
+        }
+      }
+      return brick;
     });
 
-    // ============================================
-    // CEK GAME OVER (BOLA JATUH DI BAWAH PADDLE)
-    // ============================================
-    // Jika bagian atas bola melewati batas bawah layar, game over
-    // Ini berarti pemain gagal menangkap bola dengan paddle
-    if (ballTop > SCREEN_HEIGHT) {
-      // Set status game: tidak menang, game berakhir, game tidak lagi berjalan
-      setGameWon(false);
-      setGameOver(true);
-      setGameStarted(false);
-      
-      // Simpan skor ke database jika ada current player
-      if (currentPlayer) {
-        const finalScore = scoreRef.current; // Ambil skor final dari ref
-        console.log('Saving score (game over):', finalScore, 'for player:', currentPlayer.name);
-        // Simpan skor ke database (async, tidak perlu await karena tidak blocking)
-        // Jika skor lebih tinggi dari high score, akan otomatis diupdate di database
-        updatePlayerScore(currentPlayer.id, finalScore, level).catch(error => {
-          console.error('Error saving score:', error);
+    if (bricksUpdated) {
+      setBricks(newBricks);
+    }
+
+    // CEK LEVEL COMPLETE
+    const remainingBricks = newBricks.filter(b => !b.destroyed).length;
+    if (remainingBricks === 0 && brickDestroyed) {
+      setTimeout(() => {
+        setLevel(prevLevel => {
+          const newLevel = prevLevel + 1;
+          resetBallAndPaddle();
+          return newLevel;
         });
-      }
+        setTimeout(() => initializeBricks(), 100);
+      }, 300);
+    }
+
+    // --- CEK GAME OVER (Lives System) ---
+    if (ballTop > SCREEN_HEIGHT - CONTROL_AREA_HEIGHT) {
+      setLives(prevLives => {
+        const newLives = prevLives - 1;
+        if (newLives <= 0) {
+          setGameWon(false);
+          setGameOver(true);
+          setGameStarted(false);
+          if (currentPlayer) {
+            updatePlayerScore(currentPlayer.id, scoreRef.current, level).catch(console.error);
+          }
+        } else {
+          setTimeout(() => {
+            resetBallAndPaddle();
+            setGameStarted(false); 
+          }, 500);
+        }
+        return newLives;
+      });
     }
   };
 
-  /**
-   * Fungsi utama game loop yang berjalan terus menerus selama game aktif
-   * Game loop ini:
-   * 1. Mengecek collision sebelum memindahkan bola
-   * 2. Menghitung posisi baru bola berdasarkan velocity
-   * 3. Memperbarui posisi bola di layar
-   * 4. Memanggil dirinya sendiri lagi untuk frame berikutnya
-   * 
-   * Menggunakan requestAnimationFrame untuk smooth 60fps animation
-   */
+  // ============================================
+  // FUNGSI GAME LOOP (Sama)
+  // ============================================
   const gameLoop = () => {
-    // Jika game sudah berakhir, hentikan game loop
-    if (gameOver) return;
+    if (gameOver || !gameStarted) return;
 
-    /**
-     * Fungsi update yang dipanggil setiap frame oleh requestAnimationFrame
-     * Fungsi ini melakukan update posisi dan collision detection
-     */
     const update = () => {
-      // Jika game belum dimulai atau sudah berakhir, hentikan update
       if (!gameStarted || gameOver) return;
 
-      // ============================================
-      // CEK COLLISION SEBELUM MEMINDAHKAN BOLA
-      // ============================================
-      // Ini sangat penting untuk mencegah bola melewati objek karena kecepatan tinggi
-      // Collision detection dilakukan sebelum update posisi
       checkCollisions();
 
-      // ============================================
-      // HITUNG POSISI BARU BOLA
-      // ============================================
-      // Hitung posisi baru berdasarkan posisi saat ini + velocity
-      let newX = ballXPos.current + velocityX.current;  // Posisi X baru
-      let newY = ballYPos.current + velocityY.current;  // Posisi Y baru
-      
-      // ============================================
-      // CEK FINAL SEBELUM UPDATE POSISI - MENCEGAH BOLA MELEWATI PADDLE
-      // ============================================
-      // Ini adalah safety check tambahan untuk memastikan bola tidak melewati paddle
-      // Hitung posisi paddle
-      const paddleTop = SCREEN_HEIGHT - PADDLE_HEIGHT - 30 - insets.bottom;
-      const paddleLeft = paddleXPos.current;
-      const paddleRight = paddleXPos.current + PADDLE_WIDTH;
-      
-      // Jika bola bergerak ke bawah, cek apakah akan melewati paddle
-      if (velocityY.current > 0) {
-        // Hitung posisi bola di masa depan setelah update
-        const futureBallBottom = newY + BALL_SIZE;      // Bagian bawah bola setelah update
-        const futureBallLeft = newX;                     // Bagian kiri bola setelah update
-        const futureBallRight = newX + BALL_SIZE;        // Bagian kanan bola setelah update
-        // Cek apakah ada overlap horizontal dengan paddle
-        const horizontalOverlap = futureBallRight > paddleLeft && futureBallLeft < paddleRight;
-        
-        // Jika bola akan melewati paddle, batasi posisi Y tepat di atas paddle
-        if (horizontalOverlap && futureBallBottom > paddleTop) {
-          // Batasi posisi Y agar bola tidak melewati paddle
-          newY = paddleTop - BALL_SIZE;
-          // Jika velocity masih ke bawah, balik arahnya
-          if (velocityY.current > 0) {
-            velocityY.current *= -1;
-            // Tambahkan sudut pantulan berdasarkan posisi hit di paddle
-            const ballCenterX = newX + BALL_SIZE / 2;
-            const hitPosition = Math.max(0, Math.min(1, (ballCenterX - paddleLeft) / PADDLE_WIDTH));
-            velocityX.current = (hitPosition - 0.5) * ballSpeed * 2;
-          }
-        }
-      }
-      
-      // ============================================
-      // UPDATE POSISI BOLA
-      // ============================================
-      // Update posisi aktual di ref (untuk perhitungan collision)
+      let newX = ballXPos.current + velocityX.current;
+      let newY = ballYPos.current + velocityY.current;
+
       ballXPos.current = newX;
       ballYPos.current = newY;
-      // Update animated value (untuk rendering di layar)
       ballX.setValue(newX);
       ballY.setValue(newY);
 
-      // Lanjutkan game loop dengan memanggil requestAnimationFrame lagi
-      // Ini akan memanggil fungsi update lagi di frame berikutnya (sekitar 16ms kemudian untuk 60fps)
+      setActivePowerUps(prevPowerUps => {
+        const currentPaddleWidth = paddleWidth;
+        const paddleLeft = paddleXPos.current;
+        const paddleRight = paddleXPos.current + currentPaddleWidth;
+        const paddleTop = SCREEN_HEIGHT - PADDLE_HEIGHT - 30 - insets.bottom - CONTROL_AREA_HEIGHT;
+
+        return prevPowerUps.map(pu => {
+          if (!pu.active) return pu;
+
+          const newPuY = pu.y + pu.velocityY;
+
+          const puBottom = newPuY + POWER_UP_SIZE;
+          const puRight = pu.x + POWER_UP_SIZE;
+
+          const isHit = (
+            puRight > paddleLeft &&
+            pu.x < paddleRight &&
+            puBottom > paddleTop &&
+            newPuY < paddleTop + PADDLE_HEIGHT
+          );
+
+          if (isHit) {
+            activatePowerUp(pu.type);
+            return { ...pu, active: false };
+          }
+
+          if (newPuY > SCREEN_HEIGHT) {
+            return { ...pu, active: false };
+          }
+
+          return { ...pu, y: newPuY };
+        }).filter(pu => pu.active);
+      });
+
       gameLoopRef.current = requestAnimationFrame(update);
     };
 
-    // Mulai game loop dengan memanggil requestAnimationFrame pertama kali
     gameLoopRef.current = requestAnimationFrame(update);
   };
 
-  /**
-   * Effect yang mengatur lifecycle game loop
-   * Effect ini:
-   * 1. Memulai game loop ketika game dimulai dan belum berakhir
-   * 2. Membersihkan (cleanup) game loop ketika komponen unmount atau game berakhir
-   * 
-   * Dependencies: gameStarted, gameOver, bricks
-   * - gameStarted: untuk memulai game loop
-   * - gameOver: untuk menghentikan game loop
-   * - bricks: untuk restart game loop ketika bata berubah (level naik)
-   */
   useEffect(() => {
-    // Jika game sudah dimulai dan belum berakhir, jalankan game loop
-    if (gameStarted && !gameOver) {
+    if (gameStarted && !gameOver && lives > 0) {
       gameLoop();
     }
-    
-    // Cleanup function: dipanggil ketika effect di-cleanup
-    // Ini penting untuk mencegah memory leak dan multiple game loops
     return () => {
-      // Jika ada game loop yang sedang berjalan, cancel untuk menghentikannya
       if (gameLoopRef.current) {
         cancelAnimationFrame(gameLoopRef.current);
       }
+      if (paddleIntervalRef.current) {
+        clearInterval(paddleIntervalRef.current);
+      }
     };
-  }, [gameStarted, gameOver, bricks]);
+  }, [gameStarted, gameOver, bricks, lives, paddleWidth, ballSpeedRef.current, ballSpeedSetting]);
+
+  // ============================================
+  // FUNGSI RENDER
+  // ============================================
+
+  const getBrickColor = (hits: number, id: number): string => {
+    const row = Math.floor(id / 7);
+    const baseColors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7', '#ff85a1'];
+    const baseColor = baseColors[row % baseColors.length];
+
+    if (hits === 2) {
+      return baseColor.replace('#', '#66');
+    }
+    return baseColor;
+  };
+
+  const getPowerUpIcon = (type: PowerUpType): string => {
+    switch (type) {
+      case 'speed':
+        return '⚡';
+      case 'wide_paddle':
+        return '↔️';
+      default:
+        return '✨';
+    }
+  };
+
 
   const renderBricks = () => {
     return bricks.map((brick) => {
@@ -900,192 +740,201 @@ export default function BreakoutGame() {
             {
               left: brick.x,
               top: brick.y,
-              backgroundColor: getBrickColor(brick.id),
+              backgroundColor: getBrickColor(brick.hitsRequired, brick.id),
+              borderWidth: brick.hitsRequired > 1 ? 3 : 2,
             },
           ]}
-        />
+        >
+          {brick.hitsRequired > 1 && (
+             <Text style={styles.brickHitText}>{brick.hitsRequired}</Text>
+          )}
+        </View>
       );
     });
   };
 
-  const getBrickColor = (id: number): string => {
-    const row = Math.floor(id / BRICK_COLS);
-    const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7'];
-    return colors[row % colors.length];
+  const renderPowerUps = () => {
+    return activePowerUps.map(pu => (
+      <View
+        key={pu.id}
+        style={[
+          styles.powerUp,
+          {
+            left: pu.x,
+            top: pu.y,
+            backgroundColor: pu.type === 'wide_paddle' ? '#2ecc71' : COLORS.danger,
+          },
+        ]}
+      >
+        <Text style={styles.powerUpText}>{getPowerUpIcon(pu.type)}</Text>
+      </View>
+    ));
   };
 
-  /**
-   * Render utama komponen game
-   * Menampilkan semua elemen UI game termasuk score, game area, dan overlay
-   */
+
   return (
-    <View 
-      style={[styles.container, { paddingTop: insets.top }]}
+    <View
+      style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
     >
-      {/* Status bar dengan style light (teks putih) */}
-      <StatusBar style="light" />
-      
-      {/* ============================================
-          TAMPILAN SKOR DAN INFORMASI GAME
-          ============================================ */}
-      {/* Container untuk menampilkan skor, high score, dan level */}
-      <View style={styles.scoreContainer}>
-        {/* Tampilkan skor saat ini */}
-        <Text style={styles.scoreText}>Skor: {score}</Text>
-        {/* Tampilkan skor tertinggi pemain */}
-        <Text style={styles.highScoreText}>Skor Tertinggi: {highScore}</Text>
-        {/* Tampilkan level saat ini */}
-        <Text style={styles.levelText}>Level: {level}</Text>
+      {/* Mengubah status bar agar kontras dengan latar belakang gelap */}
+      <StatusBar style="light" /> 
+
+      {/* HEADER SCORE */}
+      <View style={[styles.scoreContainer, { top: insets.top + 10 }]}>
+        <View style={styles.scoreBox}>
+          <Text style={styles.scoreLabel}>SKOR</Text>
+          <Text style={[styles.scoreValue, { color: COLORS.text }]}>{score}</Text>
+        </View>
+        <View style={styles.scoreBox}>
+          <Text style={styles.scoreLabel}>LEVEL</Text>
+          <Text style={[styles.scoreValue, { color: COLORS.primary }]}>{level}</Text>
+        </View>
+        <View style={styles.scoreBox}>
+          <Text style={styles.scoreLabel}>TERTINGGI</Text>
+          <Text style={[styles.scoreValue, { color: COLORS.secondaryText }]}>{highScore}</Text>
+        </View>
+        <View style={styles.livesBox}>
+          <Text style={styles.livesIcon}>❤️</Text>
+          <Text style={styles.livesCount}>{lives}</Text>
+        </View>
       </View>
 
-      {/* ============================================
-          AREA GAME (TEMPAT BOLA, PADDLE, DAN BATA)
-          ============================================ */}
-      {/* View utama untuk area game dengan touch handlers */}
-      <View 
-        style={styles.gameArea}
-        onTouchStart={handleTouchStart}  // Handler saat layar disentuh (untuk mulai game)
-        onTouchMove={handleTouchMove}    // Handler saat jari digeser (untuk gerakkan paddle)
-      >
-        {/* Render semua bata yang belum dihancurkan */}
+      {/* AREA GAME */}
+      <View style={styles.gameArea} onTouchStart={handleTouchStart}>
         {renderBricks()}
+        {renderPowerUps()}
 
-        {/* Bola yang bergerak - menggunakan Animated.View untuk animasi smooth */}
         <Animated.View
           style={[
-            styles.ball,  // Style dasar bola
+            styles.ball,
             {
-              left: ballX,  // Posisi X dari animated value
-              top: ballY,   // Posisi Y dari animated value
+              left: ballX,
+              top: ballY,
+              // Bola berubah warna jika power-up kecepatan aktif
+              backgroundColor: ballSpeedRef.current > ballSpeedSetting ? COLORS.primary : COLORS.text, 
             },
           ]}
         />
 
-        {/* Paddle (papan pemantul) - menggunakan Animated.View untuk animasi smooth */}
         <Animated.View
           style={[
-            styles.paddle,  // Style dasar paddle
+            styles.paddle,
             {
-              left: paddleX,                    // Posisi X dari animated value
-              bottom: 30 + insets.bottom,        // Posisi Y dari bawah (30px + safe area)
+              left: paddleX,
+              bottom: 30 + CONTROL_AREA_HEIGHT, 
+              width: paddleWidth,
+              backgroundColor: COLORS.paddle, // Menggunakan warna paddle dari konstanta
+              borderColor: COLORS.text,
             },
           ]}
         />
       </View>
+      
+      {/* KONTROL JOYSTICK */}
+      <View style={styles.controlArea}>
+        {/* Tombol Kiri */}
+        <TouchableOpacity
+          style={[styles.controlButton, paddleMoveDirection === 'left' && styles.controlButtonActive]}
+          onPressIn={() => handlePaddleStart('left')}
+          onPressOut={handlePaddleEnd}
+          disabled={!gameStarted || gameOver}
+        >
+          <Text style={styles.controlButtonText}>◀️ Kiri</Text>
+        </TouchableOpacity>
+        
+        {/* Tombol Kanan */}
+        <TouchableOpacity
+          style={[styles.controlButton, paddleMoveDirection === 'right' && styles.controlButtonActive]}
+          onPressIn={() => handlePaddleStart('right')}
+          onPressOut={handlePaddleEnd}
+          disabled={!gameStarted || gameOver}
+        >
+          <Text style={styles.controlButtonText}>Kanan ▶️</Text>
+        </TouchableOpacity>
+      </View>
 
-      {/* ============================================
-          OVERLAY MODAL (FORM, GAME OVER, START SCREEN)
-          ============================================ */}
-      {/* Overlay hanya ditampilkan ketika game belum dimulai */}
+
+      {/* OVERLAY MODAL */}
       {!gameStarted && (
-        /* Overlay background dengan pointerEvents="box-none" agar touch event bisa melewati */
         <View style={styles.overlay} pointerEvents="box-none">
-          {/* Container konten overlay dengan pointerEvents="auto" agar button bisa diklik */}
           <View style={styles.overlayContent} pointerEvents="auto">
-            {/* ============================================
-                KONDISI 1: FORM INPUT NAMA PEMAIN
-                ============================================ */}
-            {/* Tampilkan form input nama jika belum ada pemain */}
             {showPlayerForm ? (
               <>
-                <Text style={styles.overlayTitle}>Pemecah Bata</Text>
-                {/* Komponen form untuk input nama pemain */}
-                <PlayerForm onSubmit={handlePlayerSubmit} />
+                <Text style={[styles.overlayTitle, { color: COLORS.primary }]}>🎮 Pemecah Bata</Text>
+                {/* Asumsi PlayerForm sudah menggunakan style yang baik */}
+                <PlayerForm onSubmit={handlePlayerSubmit} /> 
               </>
-            ) : 
-            /* ============================================
-                KONDISI 2: FORM GANTI NAMA PEMAIN
-                ============================================ */
-            /* Tampilkan form ganti nama jika user ingin mengubah nama */
+            ) :
             showChangeNameForm ? (
               <>
-                <Text style={styles.overlayTitle}>Ganti Nama Pemain</Text>
-                {/* Komponen form dengan nama awal yang sudah diisi */}
-                <PlayerForm 
-                  onSubmit={handleChangeName} 
-                  onCancel={() => setShowChangeNameForm(false)}  // Handler untuk cancel
-                  initialName={currentPlayer?.name}               // Nama awal untuk pre-fill
+                <Text style={[styles.overlayTitle, { color: COLORS.primary }]}>Ubah Nama</Text>
+                <PlayerForm
+                  onSubmit={handleChangeName}
+                  onCancel={() => setShowChangeNameForm(false)}
+                  initialName={currentPlayer?.name}
                 />
               </>
-            ) : 
-            /* ============================================
-                KONDISI 3: MODAL GAME OVER
-                ============================================ */
-            /* Tampilkan modal game over jika game sudah berakhir */
+            ) :
             gameOver ? (
               <>
-                {/* Judul modal: berbeda untuk menang atau kalah */}
-                <Text style={styles.overlayTitle}>
-                  {gameWon ? '🎉 Selamat! Anda Menang!' : 'Permainan Berakhir!'}
+                <Text style={[styles.overlayTitle, { color: COLORS.danger }]}>
+                  {gameWon ? '🎉 Selamat, Anda Menang!' : '💥 Game Over!'}
                 </Text>
-                {/* Tampilkan skor akhir */}
-                <Text style={styles.overlayScore}>Skor: {score}</Text>
-                {/* Tampilkan level saat game berakhir */}
-                <Text style={styles.levelText}>Level: {level}</Text>
-                {/* Tampilkan pesan khusus jika pemain menang (semua bata hancur) */}
-                {gameWon && (
-                  <Text style={styles.winText}>Semua bata berhasil dihancurkan!</Text>
-                )}
-                {/* Tampilkan nama pemain jika ada */}
+                <Text style={styles.overlayScore}>Skor Akhir: {score}</Text>
+                <Text style={styles.overlayLevelText}>Level Tertinggi: {level}</Text>
                 {currentPlayer && (
                   <Text style={styles.playerNameText}>Pemain: {currentPlayer.name}</Text>
                 )}
-                {/* Tombol untuk main lagi (lanjut dari level terakhir) */}
-                <TouchableOpacity style={styles.button} onPress={() => startGame(false)}>
-                  <Text style={styles.buttonText}>Main Lagi</Text>
+                {/* Tombol Mulai Baru */}
+                <TouchableOpacity style={[styles.button, { backgroundColor: COLORS.primary }]} onPress={startFromLevel1}>
+                  <Text style={[styles.buttonText, { color: COLORS.darkBackground }]}>Mulai Baru</Text>
                 </TouchableOpacity>
-                {/* Tombol untuk mulai dari level 1 */}
-                <TouchableOpacity 
-                  style={[styles.button, styles.level1Button]} 
-                  onPress={startFromLevel1}
-                >
-                  <Text style={styles.buttonText}>Mulai dari Level 1</Text>
-                </TouchableOpacity>
-                {/* Tombol untuk melihat leaderboard */}
-                <TouchableOpacity 
-                  style={[styles.button, styles.leaderboardButton]} 
+                {/* Tombol Leaderboard */}
+                <TouchableOpacity
+                  style={[styles.button, styles.leaderboardButton, { backgroundColor: COLORS.cardBackground }]}
                   onPress={() => router.push('/leaderboard' as any)}
-                >
+                > 
                   <Text style={styles.buttonText}>Lihat Leaderboard</Text>
                 </TouchableOpacity>
               </>
             ) : 
-            /* ============================================
-                KONDISI 4: START SCREEN (SEBELUM GAME DIMULAI)
-                ============================================ */
-            /* Tampilkan start screen jika game belum dimulai dan belum berakhir */
+            lives < MAX_LIVES && lives > 0 ? (
+                // Lanjut Main setelah kehilangan nyawa
+                <>
+                    <Text style={[styles.overlayTitle, { color: COLORS.primary }]}>⚠️ Bola Jatuh!</Text>
+                    <Text style={[styles.livesCount, {fontSize: 24, marginVertical: 10, color: COLORS.text}]}>Sisa Nyawa: ❤️ {lives}</Text>
+                    <TouchableOpacity style={[styles.button, { backgroundColor: '#2ecc71' }]} onPress={startNextLife}>
+                        <Text style={styles.buttonText}>Lanjut ({lives} Nyawa)</Text>
+                    </TouchableOpacity>
+                </>
+            )
+            :
             (
+              // Tampilan Awal
               <>
-                <Text style={styles.overlayTitle}>Pemecah Bata</Text>
-                {/* Tampilkan nama pemain dan tombol ganti nama jika ada pemain */}
+                <Text style={[styles.overlayTitle, { color: COLORS.primary }]}>🎮 Pemecah Bata</Text>
                 {currentPlayer && (
                   <>
-                    <Text style={styles.playerNameText}>Pemain: {currentPlayer.name}</Text>
-                    {/* Tombol untuk mengganti nama pemain */}
-                    <TouchableOpacity 
-                      style={[styles.button, styles.changeNameButton]} 
+                    <Text style={[styles.playerNameText, { color: COLORS.secondaryText }]}>Selamat Datang, <Text style={{ color: COLORS.text, fontWeight: 'bold' }}>{currentPlayer.name}</Text></Text>
+                    <TouchableOpacity
+                      style={[styles.button, styles.changeNameButton, { backgroundColor: COLORS.cardBackground, marginBottom: 15 }]}
                       onPress={() => setShowChangeNameForm(true)}
                     >
                       <Text style={styles.buttonText}>Ganti Nama</Text>
                     </TouchableOpacity>
                   </>
                 )}
-                {/* Tombol untuk memulai game */}
-                <TouchableOpacity style={styles.button} onPress={() => startGame(false)}>
-                  <Text style={styles.buttonText}>Mulai Bermain</Text>
+                <TouchableOpacity style={[styles.button, { backgroundColor: COLORS.primary }]} onPress={() => startGame(true)}>
+                  <Text style={[styles.buttonText, { color: COLORS.darkBackground, fontWeight: '900' }]}>▶ MULAI BERMAIN</Text>
                 </TouchableOpacity>
-                {/* Tombol untuk melihat leaderboard */}
-                <TouchableOpacity 
-                  style={[styles.button, styles.leaderboardButton]} 
+                <TouchableOpacity
+                  style={[styles.button, styles.leaderboardButton, { backgroundColor: COLORS.cardBackground }]}
                   onPress={() => router.push('/leaderboard' as any)}
                 >
-                  <Text style={styles.buttonText}>Lihat Leaderboard</Text>
+                  <Text style={styles.buttonText}>🏆 Leaderboard</Text>
                 </TouchableOpacity>
-                {/* Instruksi cara bermain */}
-                <Text style={styles.instructionsText}>
-                  Geser untuk menggerakkan papan{'\n'}
-                  Hancurkan semua bata!{'\n'}
-                  Jangan biarkan bola jatuh!
+                <Text style={[styles.instructionsText, { color: COLORS.secondaryText }]}>
+                  Gunakan tombol **Kiri** dan **Kanan** di bawah untuk mengontrol papan.
                 </Text>
               </>
             )}
@@ -1098,200 +947,244 @@ export default function BreakoutGame() {
 
 /**
  * StyleSheet untuk semua komponen UI dalam game
- * Menggunakan StyleSheet.create untuk optimasi performa
  */
 const styles = StyleSheet.create({
-  // Container utama untuk seluruh halaman game
+  // --- LAYOUT & CONTAINER ---
   container: {
-    flex: 1,                      // Mengisi seluruh ruang yang tersedia
-    backgroundColor: '#1a1a2e', // Warna background gelap (biru tua)
+    flex: 1,
+    // Mengubah warna latar belakang utama
+    backgroundColor: COLORS.darkBackground, 
   },
   
-  // Container untuk menampilkan skor, high score, dan level
+  // --- SCORE HEADER ---
   scoreContainer: {
-    position: 'absolute',        // Posisi absolut agar berada di atas elemen lain
-    top: 60,                     // 60px dari atas
-    left: 0,                     // Mulai dari kiri
-    right: 0,                    // Sampai ke kanan
-    alignItems: 'center',        // Tengahkan konten secara horizontal
-    zIndex: 10,                  // Z-index tinggi agar selalu di atas game area
+    position: 'absolute',
+    left: 15,
+    right: 15,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    zIndex: 10,
+    paddingVertical: 10,
+    // Menggunakan warna kartu/elemen gelap
+    backgroundColor: COLORS.cardBackground, 
+    borderRadius: 10,
+    paddingHorizontal: 15,
+  },
+  scoreBox: {
+    alignItems: 'center',
+    paddingHorizontal: 5,
+  },
+  scoreLabel: {
+    fontSize: 10,
+    color: COLORS.secondaryText,
+    fontWeight: 'bold',
+  },
+  scoreValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
+  },
+  livesBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 5,
+    borderRadius: 5,
+    backgroundColor: '#6C3483', // Warna Lives yang berbeda
+  },
+  livesIcon: {
+    fontSize: 18,
+    marginRight: 4,
+  },
+  livesCount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
   },
   
-  // Style untuk teks skor saat ini
-  scoreText: {
-    fontSize: 20,                // Ukuran font 20
-    fontWeight: 'bold',          // Teks tebal
-    color: '#fff',               // Warna putih
-  },
-  
-  // Style untuk teks high score
-  highScoreText: {
-    fontSize: 14,                // Ukuran font 14
-    color: '#fff',               // Warna putih
-    marginTop: 4,               // Jarak atas 4px
-  },
-  
-  // Style untuk teks level
-  levelText: {
-    fontSize: 14,                // Ukuran font 14
-    color: '#fff',               // Warna putih
-    marginTop: 4,                // Jarak atas 4px
-  },
-  
-  // Area utama game tempat bola, paddle, dan bata berada
+  // --- GAME AREA ---
   gameArea: {
-    flex: 1,                     // Mengisi seluruh ruang yang tersedia
-    position: 'relative',        // Posisi relatif untuk absolute positioning child
+    flex: 1,
+    position: 'relative',
+    paddingBottom: CONTROL_AREA_HEIGHT, 
   },
-  
-  // Style untuk bola
   ball: {
-    position: 'absolute',         // Posisi absolut untuk kontrol posisi manual
-    width: BALL_SIZE,            // Lebar sesuai konstanta
-    height: BALL_SIZE,           // Tinggi sesuai konstanta
-    backgroundColor: '#fff',     // Warna putih
-    borderRadius: BALL_SIZE / 2,  // Border radius setengah ukuran untuk membuat lingkaran sempurna
-    shadowColor: '#000',         // Warna shadow hitam
-    shadowOffset: { width: 0, height: 2 }, // Offset shadow (ke bawah)
-    shadowOpacity: 0.5,          // Opasitas shadow 50%
-    shadowRadius: 4,             // Radius blur shadow
+    position: 'absolute',
+    width: BALL_SIZE,
+    height: BALL_SIZE,
+    backgroundColor: COLORS.text,
+    borderRadius: BALL_SIZE / 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.8,
+    shadowRadius: 5,
   },
-  
-  // Style untuk paddle (papan pemantul)
   paddle: {
-    position: 'absolute',         // Posisi absolut untuk kontrol posisi manual
-    width: PADDLE_WIDTH,         // Lebar sesuai konstanta
-    height: PADDLE_HEIGHT,       // Tinggi sesuai konstanta
-    backgroundColor: '#4ecdc4',   // Warna hijau muda/cyan
-    borderRadius: 10,            // Border radius untuk sudut melengkung
-    borderWidth: 2,              // Ketebalan border 2px
-    borderColor: '#fff',         // Warna border putih
-    shadowColor: '#000',         // Warna shadow hitam
-    shadowOffset: { width: 0, height: 2 }, // Offset shadow (ke bawah)
-    shadowOpacity: 0.5,          // Opasitas shadow 50%
-    shadowRadius: 4,             // Radius blur shadow
+    position: 'absolute',
+    height: PADDLE_HEIGHT,
+    backgroundColor: COLORS.paddle, // Warna Paddle
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: COLORS.text,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
   },
-  
-  // Style untuk bata/brick
   brick: {
-    position: 'absolute',         // Posisi absolut untuk kontrol posisi manual
-    width: BRICK_WIDTH,          // Lebar sesuai konstanta
-    height: BRICK_HEIGHT,         // Tinggi sesuai konstanta
-    borderRadius: 5,             // Border radius untuk sudut melengkung
-    borderWidth: 2,              // Ketebalan border 2px
-    borderColor: '#fff',         // Warna border putih
-    shadowColor: '#000',         // Warna shadow hitam
-    shadowOffset: { width: 0, height: 2 }, // Offset shadow (ke bawah)
-    shadowOpacity: 0.3,           // Opasitas shadow 30%
-    shadowRadius: 4,             // Radius blur shadow
+    position: 'absolute',
+    width: BRICK_WIDTH,
+    height: BRICK_HEIGHT,
+    borderRadius: 4,
+    borderColor: COLORS.text,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  brickHitText: {
+      color: COLORS.text,
+      fontWeight: 'bold',
+      fontSize: 14,
+  },
+  powerUp: {
+    position: 'absolute',
+    width: POWER_UP_SIZE,
+    height: POWER_UP_SIZE,
+    borderRadius: POWER_UP_SIZE / 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.7,
+    shadowRadius: 4,
+  },
+  powerUpText: {
+    fontSize: 16,
+    lineHeight: 18,
   },
   
-  // Overlay background untuk modal (form, game over, dll)
+  // --- CONTROL AREA (JOYSTICK) ---
+  controlArea: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: CONTROL_AREA_HEIGHT,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    // Menggunakan warna kartu/elemen gelap
+    backgroundColor: COLORS.cardBackground, 
+    borderTopWidth: 1,
+    borderTopColor: '#3A4A70', // Garis pemisah yang soft
+    zIndex: 15,
+  },
+  controlButton: {
+    backgroundColor: '#38425F',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 10,
+    minWidth: '45%',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#4B5A80',
+  },
+  controlButtonActive: {
+    backgroundColor: COLORS.primary, // Aksen aktif Bright Gold
+    borderColor: COLORS.text,
+  },
+  controlButtonText: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+
+  // --- OVERLAY MODAL ---
   overlay: {
-    position: 'absolute',         // Posisi absolut untuk menutupi seluruh layar
-    top: 0,                      // Mulai dari atas
-    left: 0,                     // Mulai dari kiri
-    right: 0,                    // Sampai ke kanan
-    bottom: 0,                  // Sampai ke bawah
-    backgroundColor: 'rgba(0, 0, 0, 0.8)', // Background hitam dengan opasitas 80%
-    justifyContent: 'center',    // Tengahkan konten secara vertikal
-    alignItems: 'center',        // Tengahkan konten secara horizontal
-    zIndex: 20,                  // Z-index sangat tinggi agar selalu di atas semua elemen
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 20,
   },
-  
-  // Container konten di dalam overlay
   overlayContent: {
-    backgroundColor: '#fff',     // Background putih
-    padding: 30,                  // Padding 30px di semua sisi
-    borderRadius: 20,          // Border radius untuk sudut melengkung
-    alignItems: 'center',        // Tengahkan konten secara horizontal
-    minWidth: 250,               // Lebar minimum 250px
+    // Mengubah warna modal menjadi kartu gelap
+    backgroundColor: COLORS.cardBackground, 
+    padding: 30,
+    borderRadius: 20,
+    alignItems: 'center',
+    minWidth: 280,
+    maxWidth: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.7, // Meningkatkan shadow agar lebih menonjol
+    shadowRadius: 15,
   },
-  
-  // Style untuk judul overlay
   overlayTitle: {
-    fontSize: 32,                // Ukuran font besar
-    fontWeight: 'bold',          // Teks tebal
-    color: '#ff6b6b',           // Warna merah muda
-    marginBottom: 10,            // Jarak bawah 10px
+    fontSize: 30,
+    fontWeight: '900',
+    color: COLORS.danger, // Warna Title Game Over/Primary
+    marginBottom: 15,
   },
-  
-  // Style untuk teks skor di overlay
   overlayScore: {
-    fontSize: 24,                // Ukuran font 24
-    fontWeight: 'bold',          // Teks tebal
-    color: '#333',               // Warna abu-abu gelap
-    marginBottom: 10,            // Jarak bawah 10px
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.primary, // Skor utama menggunakan aksen
+    marginBottom: 10,
   },
-  
-  // Style untuk teks overlay umum (tidak digunakan saat ini)
-  overlayText: {
-    fontSize: 18,                // Ukuran font 18
-    color: '#666',               // Warna abu-abu sedang
-    textAlign: 'center',        // Teks rata tengah
-    marginTop: 10,               // Jarak atas 10px
+  overlayLevelText: { 
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.secondaryText,
+    marginBottom: 15, 
   },
-  
-  // Style untuk teks instruksi cara bermain
-  instructionsText: {
-    fontSize: 14,                // Ukuran font 14
-    color: '#999',               // Warna abu-abu terang
-    textAlign: 'center',        // Teks rata tengah
-    marginTop: 20,               // Jarak atas 20px
-    lineHeight: 20,              // Tinggi baris 20px untuk spacing yang nyaman
-  },
-  
-  // Style untuk teks nama pemain
   playerNameText: {
-    fontSize: 16,                // Ukuran font 16
-    color: '#4ecdc4',            // Warna cyan (sama dengan paddle)
-    fontWeight: 'bold',          // Teks tebal
-    marginBottom: 10,            // Jarak bawah 10px
+    fontSize: 18,
+    color: COLORS.text,
+    fontWeight: 'bold',
+    marginBottom: 15,
   },
-  
-  // Style dasar untuk semua tombol
+  instructionsText: {
+    fontSize: 14,
+    color: COLORS.secondaryText,
+    textAlign: 'center',
+    marginTop: 20,
+    lineHeight: 20,
+  },
   button: {
-    backgroundColor: '#4ecdc4', // Background warna cyan
-    paddingVertical: 12,         // Padding vertikal 12px
-    paddingHorizontal: 30,       // Padding horizontal 30px
-    borderRadius: 10,          // Border radius untuk sudut melengkung
-    marginTop: 10,               // Jarak atas 10px
-    minWidth: 200,               // Lebar minimum 200px
-    alignItems: 'center',        // Tengahkan konten secara horizontal
+    paddingVertical: 12,
+    paddingHorizontal: 30,
+    borderRadius: 8,
+    marginTop: 10,
+    minWidth: 220,
+    alignItems: 'center',
+    // Menambahkan shadow ke tombol
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
-  
-  // Style khusus untuk tombol leaderboard
   leaderboardButton: {
-    backgroundColor: '#6c5ce7', // Background warna ungu
-    marginTop: 10,                // Jarak atas 10px
+    backgroundColor: '#6C3483', // Warna ungu untuk Leaderboard
+    marginTop: 10,
   },
-  
-  // Style untuk teks di dalam tombol
   buttonText: {
-    color: '#fff',               // Warna putih
-    fontSize: 16,                // Ukuran font 16
-    fontWeight: 'bold',          // Teks tebal
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: 'bold',
   },
-  
-  // Style untuk teks kemenangan
-  winText: {
-    fontSize: 16,                // Ukuran font 16
-    color: '#fffa24',            // Warna kuning terang
-    fontWeight: 'bold',          // Teks tebal
-    marginTop: 10,               // Jarak atas 10px
-    marginBottom: 5,             // Jarak bawah 5px
-  },
-  
-  // Style khusus untuk tombol ganti nama
   changeNameButton: {
-    backgroundColor: '#95a5a6', // Background warna abu-abu
-    marginTop: 5,                 // Jarak atas 5px
-    marginBottom: 5,             // Jarak bawah 5px
-  },
-  
-  // Style khusus untuk tombol mulai dari level 1
-  level1Button: {
-    backgroundColor: '#f39c12',  // Background warna orange
-    marginTop: 10,                // Jarak atas 10px
+    backgroundColor: '#38425F',
+    marginTop: 5,
+    marginBottom: 5,
   },
 });

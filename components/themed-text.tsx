@@ -1,20 +1,10 @@
-/**
+/*
  * ============================================
  * WATERMARK DEVELOPER
  * ============================================
- * Nama        : Edi Suherlan
- * GitHub      : github/edisuherlan
- * Email       : audhighasu@gmail.com
- * Website     : audhighasu.com
+ * Nama        : Dendi Pratama Riawan
+ * GitHub      : github/DendiPratamaRiawan
  * ============================================
- * 
- * FILE: components/themed-text.tsx
- * DESKRIPSI: Komponen Text yang mendukung theme (light/dark mode) dan berbagai tipe teks
- * 
- * Komponen ini adalah wrapper untuk Text dari React Native yang secara otomatis
- * menyesuaikan warna teks berdasarkan tema sistem (light/dark mode).
- * Komponen ini juga menyediakan beberapa tipe teks yang sudah di-predefined
- * (default, title, subtitle, link, dll) untuk konsistensi UI.
  */
 
 // Import StyleSheet, Text, dan TextProps dari React Native

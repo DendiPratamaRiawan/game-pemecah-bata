@@ -1,22 +1,10 @@
-/**
+/*
  * ============================================
  * WATERMARK DEVELOPER
  * ============================================
- * Nama        : Edi Suherlan
- * GitHub      : github/edisuherlan
- * Email       : audhighasu@gmail.com
- * Website     : audhighasu.com
+ * Nama        : Dendi Pratama Riawan
+ * GitHub      : github/DendiPratamaRiawan
  * ============================================
- * 
- * FILE: components/haptic-tab.tsx
- * DESKRIPSI: Komponen button tab dengan haptic feedback
- * 
- * Komponen ini adalah wrapper untuk button tab yang memberikan haptic feedback
- * saat user menekan tab. Haptic feedback memberikan sensasi getar ringan yang
- * meningkatkan pengalaman pengguna dengan memberikan konfirmasi taktil saat interaksi.
- * 
- * Haptic feedback hanya diaktifkan di iOS karena Android memiliki sistem haptic
- * yang berbeda dan biasanya sudah di-handle oleh sistem.
  */
 
 // Import BottomTabBarButtonProps dari @react-navigation/bottom-tabs

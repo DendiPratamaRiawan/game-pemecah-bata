@@ -1,19 +1,10 @@
-/**
+/*
  * ============================================
  * WATERMARK DEVELOPER
  * ============================================
- * Nama        : Edi Suherlan
- * GitHub      : github/edisuherlan
- * Email       : audhighasu@gmail.com
- * Website     : audhighasu.com
+ * Nama        : Dendi Pratama Riawan
+ * GitHub      : github/DendiPratamaRiawan
  * ============================================
- * 
- * FILE: components/parallax-scroll-view.tsx
- * DESKRIPSI: Komponen ScrollView dengan efek parallax pada header
- * 
- * Komponen ini membuat efek parallax pada header saat user melakukan scroll.
- * Header akan bergerak lebih lambat dari konten, menciptakan efek kedalaman 3D.
- * Efek ini memberikan pengalaman visual yang menarik dan modern.
  */
 
 // Import type dari React untuk props dan children
